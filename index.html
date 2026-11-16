@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#7a2e1d">
+<title>Court Case Calendar – Endowments</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Case Calendar">
+<style>
+  :root{
+    --bg:#faf7f2; --card:#fff; --ink:#1f1a17; --muted:#6b625b; --line:#e7dfd5;
+    --brand:#7a2e1d; --brand2:#b5562f; --soft:#f3e8dc; --ok:#2f7a3d; --warn:#a86a00; --bad:#a32020;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#16130f; --card:#211c17; --ink:#f2ebe3; --muted:#a99d91; --line:#3a312a;
+      --brand:#e2885f; --brand2:#f0a57f; --soft:#2e241c; --ok:#6cc07b; --warn:#e2ad4a; --bad:#ef7a7a; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Telugu",sans-serif;background:var(--bg);color:var(--ink)}
+  header{position:sticky;top:0;z-index:5;background:var(--brand);color:#fff;padding:12px 14px 8px}
+  @media (prefers-color-scheme: dark){ header{background:#3b1f14} }
+  h1{font-size:17px;margin:0 0 4px;font-weight:650;letter-spacing:.2px}
+  .fresh{font-size:12px;display:inline-block;padding:2px 8px;border-radius:99px;background:rgba(255,255,255,.18)}
+  .fresh.old{background:#f6c344;color:#3a2a00}
+  nav{display:flex;gap:4px;margin-top:10px;overflow-x:auto}
+  nav button{flex:1 0 auto;border:0;background:rgba(255,255,255,.12);color:#fff;padding:8px 12px;border-radius:8px;font:inherit;font-size:14px}
+  nav button.on{background:#fff;color:var(--brand)}
+  main{padding:12px;max-width:760px;margin:0 auto}
+  .bar{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+  select,input,textarea{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px}
+  .bar select{flex:1;min-width:120px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px}
+  .mhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .mhead b{font-size:16px}
+  .btn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:8px 12px;font:inherit;cursor:pointer}
+  .btn.p{background:var(--brand);border-color:var(--brand);color:#fff}
+  .btn:disabled{opacity:.5}
+  .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+  .dow{font-size:11px;color:var(--muted);text-align:center;padding:2px 0}
+  .day{min-height:52px;border-radius:8px;border:1px solid var(--line);background:var(--card);padding:4px;text-align:left;font:inherit;color:inherit;cursor:pointer;position:relative}
+  .day.out{opacity:.35}
+  .day.today{border-color:var(--brand2);box-shadow:inset 0 0 0 1px var(--brand2)}
+  .day.sel{background:var(--soft)}
+  .day .n{font-size:13px;font-weight:600}
+  .day .c{position:absolute;right:4px;bottom:4px;background:var(--brand);color:#fff;font-size:11px;border-radius:99px;padding:1px 6px;font-weight:600}
+  .day.sun .n{color:var(--bad)}
+  .strip{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+  .strip button{border:1px solid var(--line);background:var(--card);border-radius:12px;padding:10px;text-align:left;font:inherit;color:inherit;cursor:pointer}
+  .strip .big{font-size:24px;font-weight:700;color:var(--brand)}
+  .strip .lbl{font-size:12px;color:var(--muted)}
+  h2{font-size:15px;margin:14px 0 8px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .case{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px}
+  .case .top{display:flex;gap:8px;align-items:flex-start;justify-content:space-between}
+  .case .no{font-weight:650}
+  .sec{background:var(--soft);color:var(--brand);font-weight:700;font-size:12px;border-radius:6px;padding:2px 7px;white-space:nowrap}
+  .meta{font-size:13px;color:var(--muted);margin-top:4px;word-break:break-word}
+  .chips{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+  .chip{font-size:11px;border-radius:99px;padding:2px 8px;border:1px solid var(--line)}
+  .chip.S{background:#e6f0ff;color:#1d4a8f;border-color:#c9dbf7}
+  .chip.C{background:#fff1e0;color:#8a4a00;border-color:#f3d6b0}
+  .chip.G{background:#e8f6ea;color:#25602f;border-color:#c5e6ca}
+  @media (prefers-color-scheme: dark){ .chip.S{background:#1c2b44;color:#a9c7f5;border-color:#2c4266} .chip.C{background:#3a2810;color:#f2c28a;border-color:#5a3e1a} .chip.G{background:#173020;color:#9fdcaa;border-color:#28492f} }
+  .edit{margin-top:8px;border-top:1px dashed var(--line);padding-top:8px;display:grid;gap:6px}
+  .edit label{font-size:12px;color:var(--muted)}
+  .edit select,.edit input,.edit textarea{width:100%}
+  .empty{color:var(--muted);text-align:center;padding:18px 8px}
+  .note{font-size:13px;color:var(--muted)}
+  .msg{padding:10px;border-radius:10px;margin-bottom:10px;font-size:14px}
+  .msg.warn{background:#fff6dc;color:#5c4300;border:1px solid #f0dc9c}
+  .msg.err{background:#fde8e8;color:#7a1414;border:1px solid #f3c1c1}
+  .msg.ok{background:#e6f5e9;color:#1c5226;border:1px solid #bfe3c6}
+  @media (prefers-color-scheme: dark){ .msg.warn{background:#3a2e10;color:#f2d68a;border-color:#5a4718} .msg.err{background:#3d1717;color:#f5b3b3;border-color:#5e2222} .msg.ok{background:#173020;color:#a6dfb0;border-color:#28492f} }
+  table.map{width:100%;border-collapse:collapse;font-size:14px}
+  table.map td{padding:4px 2px;vertical-align:middle}
+  table.map select{width:100%}
+  ol{padding-left:20px} ol li{margin-bottom:6px}
+  .hidden{display:none!important}
+  .group-date{font-weight:650;margin:12px 0 6px;color:var(--brand)}
+</style>
+</head>
+<body>
+<header>
+  <h1>⚖️ Court Case Calendar</h1>
+  <span id="fresh" class="fresh">Loading…</span>
+  <nav id="tabs">
+    <button data-t="cal" class="on">Calendar</button>
+    <button data-t="up">Upcoming</button>
+    <button data-t="find">Search</button>
+    <button data-t="inst">Install</button>
+  </nav>
+</header>
+
+<main>
+  <div id="status"></div>
+
+  <div class="bar" id="filters">
+    <select id="fSec"><option value="">All sections</option></select>
+    <select id="fSt">
+      <option value="">All statuses</option>
+      <option value="none">No update yet</option>
+      <option value="S1">S1 Counter under circulation</option>
+      <option value="S2">S2 Pending GP approval</option>
+      <option value="noS3">Counter NOT filed (no S3/S4)</option>
+      <option value="C2">C2 For counter</option>
+    </select>
+  </div>
+
+  <!-- CALENDAR -->
+  <section id="v-cal">
+    <div class="strip">
+      <button id="goToday"><div class="big" id="cToday">–</div><div class="lbl">Today</div></button>
+      <button id="goTom"><div class="big" id="cTom">–</div><div class="lbl">Tomorrow</div></button>
+    </div>
+    <div class="card">
+      <div class="mhead">
+        <button class="btn" id="prevM" aria-label="Previous month">‹</button>
+        <b id="mLabel"></b>
+        <button class="btn" id="nextM" aria-label="Next month">›</button>
+      </div>
+      <div class="grid" id="grid"></div>
+    </div>
+    <h2><span id="dayTitle"></span><button class="btn" id="copyDay">Copy list</button></h2>
+    <div id="dayList"></div>
+  </section>
+
+  <!-- UPCOMING -->
+  <section id="v-up" class="hidden">
+    <p class="note">Next 14 days, date-wise.</p>
+    <div id="upList"></div>
+  </section>
+
+  <!-- SEARCH -->
+  <section id="v-find" class="hidden">
+    <input id="q" placeholder="Case no, petitioner, temple, section…" style="width:100%;margin-bottom:10px">
+    <div id="findList"></div>
+  </section>
+
+  <!-- INSTALL -->
+  <section id="v-inst" class="hidden">
+    <div class="card">
+      <b>Android (Chrome)</b>
+      <ol>
+        <li>ఈ పేజీని Chrome లో తెరవండి (Open this page in Chrome).</li>
+        <li>పైన కుడివైపు ⋮ మెనూ నొక్కండి (Tap ⋮ menu, top right).</li>
+        <li>"Add to Home screen" / "Install app" నొక్కండి.</li>
+        <li>Home screen లో ఐకాన్ వస్తుంది — యాప్ లాగా తెరుచుకుంటుంది.</li>
+      </ol>
+    </div>
+    <div class="card">
+      <b>iPhone (Safari)</b>
+      <ol>
+        <li>ఈ పేజీని Safari లో తెరవండి (Open in Safari).</li>
+        <li>కింద Share బటన్ (⬆️ బాక్స్) నొక్కండి.</li>
+        <li>"Add to Home Screen" ఎంచుకుని "Add" నొక్కండి.</li>
+      </ol>
+    </div>
+    <div class="card note">No login needed. The calendar is updated every day from the endowmentsinfo Excel. Status codes are shown as updated by the Legal Cell.</div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const SECTIONS = ["A","B","C","D","DP-CELL","E","F","J","K","L","M","P","Q","S","U","AWF"];
+  const CODES = {
+    S: [["S1","Counter under circulation"],["S2","Pending for GP approval"],["S3","Counter filed"],["S4","Not required (formal party)"]],
+    C: [["C1","Adjourned"],["C2","For counter"],["C3","Interim order"],["C4","Judgment reserved"],["C5","Disposed"],["C6","Not reached"]],
+    G: [["G1","Handed to GP office"],["G2","Approved by GP"],["G3","Pending with GP"],["G4","Additional material required"],["G5","Discussion needed"],["G6","Returned for corrections"]]
+  };
+  const CODE_LABEL = {}; Object.values(CODES).flat().forEach(([c,l]) => CODE_LABEL[c] = l);
+  const FIELDS = [
+    ["n","Case number", /(case|w\.?\s*p|writ|o\.?\s*s|c\.?\s*c|a\.?\s*s)\s*\.?\s*(no|number|num)|^case\s*no|^case$|^wp$/i],
+    ["d","Next hearing date", /next.*(date|hear)|hearing\s*date|date\s*of\s*hearing|posting\s*date|posted\s*on|listed\s*on|^nhd$|next\s*date/i],
+    ["s","Section", /section|^sec\b/i],
+    ["p","Petitioner", /petitioner|appellant|applicant|plaintiff/i],
+    ["r","Respondent", /respondent|defendant/i],
+    ["sub","Subject / Institution", /subject|prayer|institution|temple|matter|brief|particular/i],
+    ["st","Case status (Excel)", /status|stage/i],
+    ["ct","Court / Bench", /court\s*(hall|no)|bench|hall|judge|court$/i]
+  ];
+
+  // ---------- state ----------
+  const canEditStatus = false;
+  let meta = null, chunkDocs = [], statusMap = {};
+  let cases = [];            // merged list
+  let byDate = new Map();    // iso -> [case]
+  let view = "cal", curMonth, selDate, openKey = null;
+  const $ = id => document.getElementById(id);
+
+  // ---------- dates ----------
+  const pad = n => String(n).padStart(2,"0");
+  const isoOf = d => d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+  const todayISO = () => isoOf(new Date());
+  const addDays = (iso, k) => { const [y,m,d] = iso.split("-").map(Number); return isoOf(new Date(y, m-1, d+k)); };
+  const MONTHS = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+  function fmt(iso){ if(!iso) return ""; const [y,m,d] = iso.split("-").map(Number);
+    return new Date(y,m-1,d).toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short",year:"numeric"}); }
+  function toISO(v){
+    if (v == null || v === "") return "";
+    if (typeof v === "number" && v > 20000 && v < 80000) {
+      const dt = new Date(Math.round((v - 25569) * 86400000));
+      return dt.getUTCFullYear()+"-"+pad(dt.getUTCMonth()+1)+"-"+pad(dt.getUTCDate());
+    }
+    const s = String(v).trim();
+    let m = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);
+    if (m) return m[1]+"-"+pad(+m[2])+"-"+pad(+m[3]);
+    m = s.match(/(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})/);
+    if (m) { let y = +m[3]; if (y < 100) y += 2000; const mo = +m[2], d = +m[1];
+      if (mo>=1 && mo<=12 && d>=1 && d<=31) return y+"-"+pad(mo)+"-"+pad(d); }
+    m = s.match(/(\d{1,2})[\s\-.\/]*([A-Za-z]{3})[A-Za-z]*[\s\-.,\/]*(\d{4})/);
+    if (m) { const mo = MONTHS.indexOf(m[2].toLowerCase()); if (mo >= 0) return m[3]+"-"+pad(mo+1)+"-"+pad(+m[1]); }
+    return "";
+  }
+
+  // ---------- helpers ----------
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const keyOf = n => String(n).toUpperCase().replace(/[^A-Z0-9]+/g,"_").replace(/^_+|_+$/g,"").slice(0,150);
+  function showStatus(html, kind="warn"){ $("status").innerHTML = html ? `<div class="msg ${kind}">${html}</div>` : ""; }
+
+  // ---------- merge data ----------
+  function rebuild(){
+    if (!meta) { cases = []; } else {
+      cases = chunkDocs;
+    }
+    const impAt = meta?.at || "";
+    byDate = new Map();
+    for (const c of cases) {
+      const st = statusMap[c.k];
+      c._st = st || null;
+      c._date = (st && st.nd && st.at && st.at > impAt) ? st.nd : c.d;
+      if (!c._date) continue;
+      if (!byDate.has(c._date)) byDate.set(c._date, []);
+      byDate.get(c._date).push(c);
+    }
+    // section filter options
+    const secs = new Set(SECTIONS); cases.forEach(c => c.s && secs.add(String(c.s).trim().toUpperCase()));
+    const cur = $("fSec").value;
+    $("fSec").innerHTML = `<option value="">All sections</option>` + [...secs].sort().map(s => `<option ${s===cur?"selected":""}>${esc(s)}</option>`).join("");
+    renderFresh(); render();
+  }
+
+  function passes(c){
+    const fs = $("fSec").value, ft = $("fSt").value;
+    if (fs && String(c.s||"").trim().toUpperCase() !== fs) return false;
+    if (ft) {
+      const st = c._st || {};
+      if (ft === "none") return !(st.S || st.C || st.G);
+      if (ft === "noS3") return !(st.S === "S3" || st.S === "S4");
+      if (!(st.S === ft || st.C === ft || st.G === ft)) return false;
+    }
+    return true;
+  }
+  const casesOn = iso => (byDate.get(iso) || []).filter(passes);
+
+  // ---------- render ----------
+  function renderFresh(){
+    const f = $("fresh");
+    if (!meta) { f.textContent = "No data yet"; f.className = "fresh old"; return; }
+    const d = new Date(meta.at); const iso = isoOf(d);
+    const txt = `Excel of ${d.toLocaleDateString("en-IN",{day:"numeric",month:"short"})} · ${meta.count} cases`;
+    f.textContent = iso === todayISO() ? "✓ " + txt : "⚠ " + txt + " — today's list not yet updated";
+    f.className = "fresh" + (iso === todayISO() ? "" : " old");
+  }
+
+  function caseHTML(c){
+    const st = c._st || {};
+    const chips = ["S","C","G"].filter(k => st[k]).map(k => `<span class="chip ${k}" title="${esc(CODE_LABEL[st[k]]||"")}">${esc(st[k])} ${esc(CODE_LABEL[st[k]]||"")}</span>`).join("");
+    const parties = [c.p, c.r].filter(Boolean).map(x => esc(String(x).slice(0,90))).join(" <i>vs</i> ");
+    const open = openKey === c.k;
+    let edit = "";
+    if (open) {
+      if (canEditStatus) {
+        const sel = (k) => `<label>${k==="S"?"Section":k==="C"?"ALO-1 (court)":"ALO-2 (GP)"}</label><select data-f="${k}"><option value="">—</option>${CODES[k].map(([v,l]) => `<option value="${v}" ${st[k]===v?"selected":""}>${v} ${l}</option>`).join("")}</select>`;
+        edit = `<div class="edit" data-k="${esc(c.k)}">${sel("S")}${sel("C")}${sel("G")}
+          <label>Next hearing date (from ALO-1)</label><input type="date" data-f="nd" value="${esc(st.nd||"")}">
+          <label>Note</label><textarea data-f="note" rows="2">${esc(st.note||"")}</textarea>
+          <button class="btn p" data-save="${esc(c.k)}">Save update</button></div>`;
+      } else {
+        edit = `<div class="edit note">${st.note ? "Note: "+esc(st.note)+"<br>" : ""}${st.at ? "Last update: "+esc(new Date(st.at).toLocaleString("en-IN")) : "No updates yet."}${c.st ? "<br>Excel status: "+esc(c.st) : ""}</div>`;
+      }
+    }
+    return `<div class="case" data-open="${esc(c.k)}">
+      <div class="top"><div class="no">${esc(c.n)}</div>${c.s ? `<span class="sec">${esc(c.s)}</span>` : ""}</div>
+      ${parties ? `<div class="meta">${parties}</div>` : ""}
+      ${c.sub ? `<div class="meta">${esc(String(c.sub).slice(0,140))}</div>` : ""}
+      ${c.ct ? `<div class="meta">${esc(c.ct)}</div>` : ""}
+      ${chips ? `<div class="chips">${chips}</div>` : ""}
+      ${edit}
+    </div>`;
+  }
+  const listHTML = arr => arr.length ? arr.map(caseHTML).join("") : `<div class="empty">No cases.</div>`;
+
+  function renderCal(){
+    const t = todayISO();
+    $("cToday").textContent = casesOn(t).length;
+    $("cTom").textContent = casesOn(addDays(t,1)).length;
+    const y = curMonth.getFullYear(), m = curMonth.getMonth();
+    $("mLabel").textContent = curMonth.toLocaleDateString("en-IN",{month:"long",year:"numeric"});
+    const first = new Date(y, m, 1), start = new Date(y, m, 1 - first.getDay());
+    let h = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(d => `<div class="dow">${d}</div>`).join("");
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(start.getFullYear(), start.getMonth(), start.getDate()+i), iso = isoOf(d);
+      if (i >= 35 && d.getMonth() !== m) break;
+      const n = casesOn(iso).length;
+      h += `<button class="day ${d.getMonth()!==m?"out":""} ${iso===t?"today":""} ${iso===selDate?"sel":""} ${d.getDay()===0?"sun":""}" data-d="${iso}">
+        <span class="n">${d.getDate()}</span>${n ? `<span class="c">${n}</span>` : ""}</button>`;
+    }
+    $("grid").innerHTML = h;
+    const arr = casesOn(selDate);
+    $("dayTitle").textContent = `${fmt(selDate)} · ${arr.length} case${arr.length===1?"":"s"}`;
+    $("dayList").innerHTML = listHTML(arr);
+  }
+
+  function renderUp(){
+    const t = todayISO(); let h = "";
+    for (let i = 0; i < 14; i++) {
+      const iso = addDays(t, i), arr = casesOn(iso);
+      if (!arr.length) continue;
+      h += `<div class="group-date">${fmt(iso)} · ${arr.length}</div>` + listHTML(arr);
+    }
+    $("upList").innerHTML = h || `<div class="empty">No cases in the next 14 days.</div>`;
+  }
+
+  function renderFind(){
+    const q = $("q").value.trim().toLowerCase();
+    if (q.length < 2) { $("findList").innerHTML = `<div class="empty">Type at least 2 letters.</div>`; return; }
+    const res = cases.filter(c => passes(c) && [c.n,c.p,c.r,c.sub,c.s].some(x => x && String(x).toLowerCase().includes(q))).slice(0, 60);
+    $("findList").innerHTML = res.length ? res.map(c => `<div class="note" style="margin:8px 0 2px">${c._date ? "Next: "+esc(fmt(c._date)) : "No date"}</div>` + caseHTML(c)).join("") : `<div class="empty">Nothing found.</div>`;
+  }
+
+  function render(){
+    if (view === "cal") renderCal();
+    else if (view === "up") renderUp();
+    else if (view === "find") renderFind();
+  }
+
+  // ---------- events ----------
+  $("tabs").addEventListener("click", e => {
+    const b = e.target.closest("button[data-t]"); if (!b) return;
+    view = b.dataset.t;
+    document.querySelectorAll("nav button").forEach(x => x.classList.toggle("on", x === b));
+    ["cal","up","find","inst"].forEach(v => $("v-"+v).classList.toggle("hidden", v !== view));
+    $("filters").classList.toggle("hidden", view === "inst");
+    render();
+  });
+  $("fSec").onchange = $("fSt").onchange = render;
+  $("q").oninput = () => { clearTimeout(window._qt); window._qt = setTimeout(renderFind, 200); };
+  $("prevM").onclick = () => { curMonth = new Date(curMonth.getFullYear(), curMonth.getMonth()-1, 1); renderCal(); };
+  $("nextM").onclick = () => { curMonth = new Date(curMonth.getFullYear(), curMonth.getMonth()+1, 1); renderCal(); };
+  function pick(iso){ selDate = iso; const [y,m] = iso.split("-").map(Number); curMonth = new Date(y, m-1, 1); openKey = null; renderCal(); }
+  $("goToday").onclick = () => pick(todayISO());
+  $("goTom").onclick = () => pick(addDays(todayISO(),1));
+  $("grid").addEventListener("click", e => { const b = e.target.closest(".day"); if (b) { selDate = b.dataset.d; openKey = null; renderCal(); $("dayTitle").scrollIntoView({behavior:"smooth",block:"start"}); } });
+
+  document.addEventListener("click", async e => {
+    if (e.target.closest(".edit")) return;
+    const c = e.target.closest(".case[data-open]");
+    if (c) { openKey = openKey === c.dataset.open ? null : c.dataset.open; render(); }
+  });
+
+  $("copyDay").onclick = async () => {
+    const arr = casesOn(selDate);
+    const txt = `Cases listed on ${fmt(selDate)} (${arr.length})\n` + arr.map((c,i) => {
+      const st = c._st || {}; const codes = ["S","C","G"].map(k => st[k]).filter(Boolean).join(" ");
+      return `${i+1}. ${c.n}${c.s ? " [Sec "+c.s+"]" : ""}${codes ? " – "+codes : ""}`; }).join("\n");
+    try { await navigator.clipboard.writeText(txt); $("copyDay").textContent = "Copied ✓"; }
+    catch { $("copyDay").textContent = "Copy not allowed"; }
+    setTimeout(() => $("copyDay").textContent = "Copy list", 1800);
+  };
+
+
+  // ---------- boot ----------
+  curMonth = new Date(); curMonth.setDate(1); selDate = todayISO();
+  render();
+
+  (async () => {
+    try {
+      const r = await fetch("data.json?t=" + Date.now(), { cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const j = await r.json();
+      meta = j.meta || null; chunkDocs = j.cases || []; statusMap = j.status || {};
+      if (!chunkDocs.length) showStatus("No cases loaded yet.");
+      rebuild();
+    } catch (err) {
+      showStatus("Could not load the case list. Check your internet and reopen the app.", "err");
+      $("fresh").textContent = "Offline";
+    }
+  })();
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+})();
+</script>
+</body>
+</html>
