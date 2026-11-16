@@ -101,11 +101,11 @@
     <select id="fSec"><option value="">All sections</option></select>
     <select id="fSt">
       <option value="">All statuses</option>
-      <option value="none">No update yet</option>
+      <option value="none">No court result yet</option>
       <option value="S1">S1 Counter under circulation</option>
       <option value="S2">S2 Pending GP approval</option>
       <option value="noS3">Counter NOT filed (no S3/S4)</option>
-      <option value="C2">C2 For counter</option>
+      <option value="C1">C1 Adjourned</option><option value="C2">C2 For counter</option><option value="C3">C3 Interim order</option><option value="C6">C6 Not reached</option>
     </select>
   </div>
 
@@ -230,10 +230,10 @@
     for (const c of cases) {
       const st = statusMap[c.k];
       c._st = st || null;
-      c._date = (st && st.nd && st.at && st.at > impAt) ? st.nd : c.d;
-      if (!c._date) continue;
-      if (!byDate.has(c._date)) byDate.set(c._date, []);
-      byDate.get(c._date).push(c);
+      const ds = (c.ds && c.ds.length) ? c.ds : (c.d ? [c.d] : []);
+      const t = todayISO();
+      c._date = ds.find(x => x >= t) || ds[ds.length-1] || "";
+      for (const x of ds) { if (!byDate.has(x)) byDate.set(x, []); byDate.get(x).push(c); }
     }
     // section filter options
     const secs = new Set(SECTIONS); cases.forEach(c => c.s && secs.add(String(c.s).trim().toUpperCase()));
@@ -248,7 +248,7 @@
     if (ft) {
       const st = c._st || {};
       if (ft === "none") return !(st.S || st.C || st.G);
-      if (ft === "noS3") return !(st.S === "S3" || st.S === "S4");
+      if (ft === "noS3") return c.site === "Counter NOT filed" || (!c.site && !(st.S === "S3" || st.S === "S4"));
       if (!(st.S === ft || st.C === ft || st.G === ft)) return false;
     }
     return true;
@@ -260,8 +260,8 @@
     const f = $("fresh");
     if (!meta) { f.textContent = "No data yet"; f.className = "fresh old"; return; }
     const d = new Date(meta.at); const iso = isoOf(d);
-    const txt = `Excel of ${d.toLocaleDateString("en-IN",{day:"numeric",month:"short"})} · ${meta.count} cases`;
-    f.textContent = iso === todayISO() ? "✓ " + txt : "⚠ " + txt + " — today's list not yet updated";
+    const txt = `Updated ${d.toLocaleString("en-IN",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"})} · ${meta.count} cases`;
+    f.textContent = iso === todayISO() ? "✓ " + txt : "⚠ " + txt + " — not yet updated today";
     f.className = "fresh" + (iso === todayISO() ? "" : " old");
   }
 
@@ -286,7 +286,9 @@
       <div class="top"><div class="no">${esc(c.n)}</div>${c.s ? `<span class="sec">${esc(c.s)}</span>` : ""}</div>
       ${parties ? `<div class="meta">${parties}</div>` : ""}
       ${c.sub ? `<div class="meta">${esc(String(c.sub).slice(0,140))}</div>` : ""}
-      ${c.ct ? `<div class="meta">${esc(c.ct)}</div>` : ""}
+      ${(c.ct || c.dist) ? `<div class="meta">${esc([c.ct, c.dist].filter(Boolean).join(" · "))}</div>` : ""}
+      ${c.site ? `<div class="meta"><b>${esc(c.site)}</b></div>` : ""}
+      ${c._st && c._st.note && !open ? `<div class="meta">📝 ${esc(String(c._st.note).slice(0,120))}</div>` : ""}
       ${chips ? `<div class="chips">${chips}</div>` : ""}
       ${edit}
     </div>`;
@@ -327,7 +329,7 @@
   function renderFind(){
     const q = $("q").value.trim().toLowerCase();
     if (q.length < 2) { $("findList").innerHTML = `<div class="empty">Type at least 2 letters.</div>`; return; }
-    const res = cases.filter(c => passes(c) && [c.n,c.p,c.r,c.sub,c.s].some(x => x && String(x).toLowerCase().includes(q))).slice(0, 60);
+    const res = cases.filter(c => passes(c) && [c.n,c.p,c.r,c.sub,c.s,c.dist].some(x => x && String(x).toLowerCase().includes(q))).slice(0, 60);
     $("findList").innerHTML = res.length ? res.map(c => `<div class="note" style="margin:8px 0 2px">${c._date ? "Next: "+esc(fmt(c._date)) : "No date"}</div>` + caseHTML(c)).join("") : `<div class="empty">Nothing found.</div>`;
   }
 
