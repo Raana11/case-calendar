@@ -390,6 +390,83 @@
     return { data: { ...old, meta: { ...(old.meta || {}), at: nowIso, count: list.length, results: listDate }, cases: list, status }, added, updated };
   }
 
+
+  /* ---------- Tally "Case Update" form: links out, CSV in ---------- */
+  const TALLY_FORM = "https://tally.so/r/yX4EG0";
+  function tallyLink(p) {
+    const q = Object.entries(p).filter(([, v]) => v).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&");
+    return `${TALLY_FORM}?${q}`;
+  }
+  // cases listed on `day` in the team data → link groups for Sections / ALO-1 / ALO-2 / DEO
+  function tallyGroups(data, day) {
+    const dm = day.slice(8, 10) + "-" + day.slice(5, 7) + "-" + day.slice(0, 4);
+    const onDay = (data.cases || []).filter(c => (c.ds || []).includes(day));
+    const st = k => (data.status || {})[k] || {};
+    const court = c => (c.ct || "").replace(/^Court\s*/, "").replace(" · Item ", "/");
+    const mk = (c, role, extra = {}) => ({ caseNo: c.n, sec: c.s || "", court: court(c), site: c.site || "", link: tallyLink({ case: c.n, role, sec: c.s || "", date: dm, court: court(c), ...extra }) });
+    const groups = {};
+    for (const c of onDay) {
+      if (!c.s || st(c.k).C === "C5") continue;   // no section yet (goes to DEO) / disposed – nothing to ask
+      const sec = c.s.toUpperCase();
+      (groups["Section " + sec] ||= []).push(mk(c, "Section"));
+    }
+    groups["ALO-1 (court results)"] = onDay.map(c => mk(c, "ALO1"));
+    groups["ALO-2 (GP office)"] = onDay.filter(c => /NOT filed|blank/i.test(c.site || "") || ["S1", "S2"].includes(st(c.k).S)).map(c => mk(c, "ALO2"));
+    groups["DEO (endowmentsinfo)"] = onDay.filter(c => /Not in endowmentsinfo|blank/i.test(c.site || "") || !c.s).map(c => mk(c, "DEO"));
+    for (const k of Object.keys(groups)) if (!groups[k].length) delete groups[k];
+    return groups;
+  }
+  function tallyWhatsApp(title, rows) {
+    return `*${title}*\n` + "ప్రతి కేసు లింక్ నొక్కి ఒక ఆప్షన్ ఎంచుకుని Submit చేయండి.\n\n" +
+      rows.map((r, i) => `${i + 1}. ${r.caseNo}${r.court ? " (Ct " + r.court + ")" : ""}${r.site ? " – " + r.site : ""}\n${r.link}`).join("\n\n");
+  }
+  // Tally CSV export rows (objects by header) → one update per case+role (latest submission wins)
+  function parseTallyCSV(rows) {
+    if (!rows.length) return { updates: [], conflicts: [] };
+    const H = Object.keys(rows[0]);
+    const col = re => H.find(h => re.test(h));
+    const cCase = col(/^case$/i), cRole = col(/^role$/i), cSec = col(/^sec$/i), cDate = col(/^date$/i), cAt = col(/submitted at/i);
+    const cS = col(/Counter status/i), cC = col(/Court result/i), cN = col(/Next hearing/i), cG = col(/GP office/i), cD = col(/DEO update/i), cR = col(/Remarks/i);
+    if (!cCase || !cRole) throw new Error("This CSV is not from the 'Case Update' Tally form (no case / role columns).");
+    const code = v => (String(v || "").match(/^\s*(S[1-4]|NS|C[1-6]|G[1-6]|D[1-6])\b/) || [])[1] || "";
+    const toIso = v => { const t = String(v || "").trim(); let m = t.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return m[0];
+      m = t.match(/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})/); return m ? `${m[3]}-${pad(+m[2])}-${pad(+m[1])}` : ""; };
+    const latest = new Map();
+    for (const r of rows) {
+      const caseNo = clean(r[cCase]).toUpperCase(), role = clean(r[cRole]); if (!caseNo || !role) continue;
+      const u = { caseNo, role, sec: clean(cSec && r[cSec]).toUpperCase(), day: clean(cDate && r[cDate]), at: clean(cAt && r[cAt]),
+        S: code(cS && r[cS]), C: code(cC && r[cC]), next: toIso(cN && r[cN]), G: code(cG && r[cG]), D: code(cD && r[cD]), remark: clean(cR && r[cR]) };
+      const key = caseNo + "|" + role + "|" + u.sec, prev = latest.get(key);
+      if (!prev || u.at > prev.at) latest.set(key, u);
+    }
+    const updates = [...latest.values()];
+    // same case, two sections answering differently
+    const conflicts = [];
+    const bySec = {};
+    for (const u of updates.filter(u => u.role === "Section" && u.S && u.S !== "NS")) (bySec[u.caseNo] ||= []).push(u);
+    for (const [c, arr] of Object.entries(bySec)) if (new Set(arr.map(a => a.S)).size > 1) conflicts.push({ caseNo: c, answers: arr.map(a => `Sec ${a.sec}: ${a.S}`).join(", ") });
+    return { updates, conflicts };
+  }
+  function applyTallyUpdates(old, updates, nowIso) {
+    const cases = new Map((old.cases || []).map(c => [c.k, { ...c, ds: [...(c.ds || (c.d ? [c.d] : []))] }]));
+    const status = { ...(old.status || {}) }; let n = 0; const missing = [];
+    const ordered = [...updates].sort((a, b) => (a.at || "").localeCompare(b.at || ""));
+    for (const u of ordered) {
+      const k = keyOf(u.caseNo), c = cases.get(k);
+      if (!c) { missing.push(u.caseNo); continue; }
+      const st = { ...(status[k] || {}) };
+      const who = u.role === "Section" ? "Sec " + u.sec : u.role;
+      if (u.S && u.S !== "NS") st.S = u.S;
+      if (u.S === "NS") st.secFlag = `Sec ${u.sec} says not theirs`;
+      if (u.C) { st.C = u.C; if (u.next) { st.nd = u.next; if (!c.ds.includes(u.next)) { c.ds.push(u.next); c.ds.sort(); c.d = c.ds[c.ds.length - 1]; } } }
+      if (u.G) st.G = u.G;
+      if (u.D) st.D = u.D;
+      if (u.remark) st.note = `${(u.day || "").slice(0, 5)} ${who}: ${u.remark}`.trim();
+      st.at = nowIso; status[k] = st; n++;
+    }
+    return { data: { ...old, meta: { ...(old.meta || {}), at: nowIso }, cases: [...cases.values()], status }, applied: n, missing };
+  }
+
   /* ---------- match + segregate ---------- */
 
   const COUNTER_LABEL = { filed: "Counter filed", notfiled: "Counter NOT filed", proforma: "Formal party", blank: "Status blank in endowmentsinfo", missing: "Not in endowmentsinfo" };
@@ -504,6 +581,6 @@
     return `*${title}* (${rows.length})\n` + rows.map((r, i) => `${i + 1}. ` + cols.map(c => r[c]).filter(v => v !== "" && v != null && v !== "—").join(" | ")).join("\n");
   }
 
-  const api = { mergeResultReadings, applyResults, parseResultsWords, classifyRemark, fixCase, fixCaseVariants, buildCasesInfo, pdfToLines, parseCauseList, parseEndowmentsInfo, buildReport, mergeData, tables, toWhatsApp, keyOf, COUNTER_LABEL };
+  const api = { tallyGroups, tallyWhatsApp, parseTallyCSV, applyTallyUpdates, mergeResultReadings, applyResults, parseResultsWords, classifyRemark, fixCase, fixCaseVariants, buildCasesInfo, pdfToLines, parseCauseList, parseEndowmentsInfo, buildReport, mergeData, tables, toWhatsApp, keyOf, COUNTER_LABEL };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.CCEngine = api;
 })(typeof window !== "undefined" ? window : globalThis);

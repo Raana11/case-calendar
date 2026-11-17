@@ -121,6 +121,31 @@
     </div>
   </div>
 
+  <!-- TALLY: links out -->
+  <div class="card" id="tlCard">
+    <h2>📨 Tally లింక్‌లు (సెక్షన్లు / ALO / DEO కి)</h2>
+    <p class="note">ఎంచుకున్న తేదీన లిస్ట్ అయిన కేసులకు, ఒక్కొక్కరికి వాళ్ళ కేసుల లింక్‌లు మాత్రమే. WhatsApp కి కాపీ చేసి పంపండి.</p>
+    <div class="row"><label class="note">తేదీ <input type="date" id="tlDate"></label><button class="btn p" id="tlMake">లింక్‌లు తయారు చేయి</button></div>
+    <div id="tlBox" class="hidden" style="margin-top:8px">
+      <div class="row"><select id="tlGroup" style="max-width:320px"></select><button class="btn" id="tlCopy">WhatsApp కి కాపీ</button></div>
+      <pre class="wa" id="tlWa"></pre>
+    </div>
+    <div id="tlMsg"></div>
+  </div>
+
+  <!-- TALLY: answers in -->
+  <div class="card" id="tiCard">
+    <h2>📥 Tally సమాధానాలు (CSV)</h2>
+    <p class="note">Tally లో "Case Update" ఫారమ్ → Submissions → Download CSV. ఆ ఫైల్ ఇక్కడ ఎంచుకోండి.</p>
+    <input type="file" id="fTally" accept=".csv,text/csv">
+    <div id="tiMsg"></div>
+    <div id="tiBox" class="hidden">
+      <div class="tw" id="tiTable"></div>
+      <div class="row" style="margin-top:8px"><button class="btn p" id="tiPub">సమాధానాలు Publish</button></div>
+      <div id="tiPubMsg"></div>
+    </div>
+  </div>
+
   <!-- HISTORY -->
   <div class="card">
     <h2>🕘 History / వెనక్కి వెళ్ళడం</h2>
@@ -434,6 +459,58 @@ $("resPub").onclick = async () => {
     await putFile("data.json", JSON.stringify(m.data), cur.sha, `Court results ${listDate}: ${m.updated + m.added} cases (+${m.added} new)`);
     msg("resPubMsg", `✓ ${m.updated + m.added} కేసుల ఫలితాలు Publish అయ్యాయి. టీమ్ యాప్‌లో 1–2 నిమిషాల్లో కనిపిస్తాయి.`, "ok");
   } catch (e) { msg("resPubMsg", "Publish కాలేదు: " + esc(e.message), "err"); }
+  b.disabled = false;
+};
+
+/* ---------- Tally links out / answers in ---------- */
+async function freshData() { const r = await fetch("data.json?t=" + Date.now(), { cache: "no-store" }); if (!r.ok) throw new Error("data.json చదవలేకపోయాను"); return r.json(); }
+let TL = null;
+(async () => {   // default date: next day with listed cases
+  try { const d = await freshData(), t = todayISO(); const days = [...new Set(d.cases.flatMap(c => c.ds || []))].filter(x => x > t).sort(); $("tlDate").value = days[0] || t; } catch { $("tlDate").value = todayISO(); }
+})();
+$("tlMake").onclick = async () => {
+  try {
+    const d = await freshData(); TL = E.tallyGroups(d, $("tlDate").value);
+    const keys = Object.keys(TL);
+    if (!keys.length) { msg("tlMsg", "ఈ తేదీన కేసులు లేవు."); $("tlBox").classList.add("hidden"); return; }
+    $("tlGroup").innerHTML = keys.map(k => `<option>${esc(k)}</option>`).join("");
+    $("tlBox").classList.remove("hidden"); msg("tlMsg", ""); showTL();
+  } catch (e) { msg("tlMsg", esc(e.message), "err"); }
+};
+function showTL() { const k = $("tlGroup").value; $("tlWa").textContent = E.tallyWhatsApp(`${k} – ${$("tlDate").value.split("-").reverse().join("-")} (${TL[k].length})`, TL[k]); }
+$("tlGroup").onchange = showTL;
+$("tlCopy").onclick = () => copy($("tlWa").textContent, "tlCopy");
+
+let TI = null;
+$("fTally").onchange = async e => {
+  const f = e.target.files[0]; if (!f) return; msg("tiMsg", ""); $("tiBox").classList.add("hidden");
+  try {
+    const wb = XLSX.read(await f.text(), { type: "string", raw: true });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "", raw: false });
+    TI = E.parseTallyCSV(rows);
+    const d = await freshData(); const known = new Set(d.cases.map(c => c.n));
+    const conf = new Set(TI.conflicts.map(c => c.caseNo));
+    $("tiTable").innerHTML = `<table><tr><th>Case</th><th>ఎవరు</th><th>సమాధానం</th><th>తదుపరి తేదీ</th><th>Remark</th></tr>` + TI.updates.map(u => {
+      const ans = [u.S, u.C, u.G, u.D].filter(Boolean).join(" "), warn = [];
+      if (!known.has(u.caseNo)) warn.push("మన జాబితాలో లేదు – వదిలేస్తుంది");
+      if (conf.has(u.caseNo)) warn.push("రెండు సెక్షన్లు వేర్వేరు సమాధానాలు");
+      if (u.S === "NS") warn.push("తమ సెక్షన్ కాదు అంటున్నారు – DEO కి");
+      return `<tr class="${warn.length ? "flag" : ""}"><td><b>${esc(u.caseNo)}</b>${warn.map(w => `<div class="fl">⚠ ${esc(w)}</div>`).join("")}</td><td>${esc(u.role === "Section" ? "Sec " + u.sec : u.role)}</td><td>${esc(ans)}</td><td>${esc(u.next)}</td><td>${esc(u.remark)}</td></tr>`;
+    }).join("") + `</table>`;
+    $("tiBox").classList.remove("hidden");
+    msg("tiMsg", `✓ ${TI.updates.length} సమాధానాలు (ఒక్కో కేసు+వ్యక్తికి తాజాది).` + (TI.conflicts.length ? ` ⚠ ${TI.conflicts.length} కేసుల్లో సెక్షన్ల సమాధానాలు భిన్నంగా ఉన్నాయి – చివరిది తీసుకుంటుంది.` : ""), TI.conflicts.length ? "warn" : "ok");
+  } catch (err) { msg("tiMsg", "తప్పు: " + esc(err.message || err), "err"); }
+};
+$("tiPub").onclick = async () => {
+  if (!token) { msg("tiPubMsg", "ముందు పైన GitHub key సేవ్ చేయండి.", "err"); return; }
+  const b = $("tiPub"); b.disabled = true; msg("tiPubMsg", "Publish అవుతోంది…");
+  try {
+    const cur = await getFile("data.json");
+    await putFile(`history/${stamp()}.json`, cur.text, null, "Backup before Tally answers");
+    const m = E.applyTallyUpdates(JSON.parse(cur.text), TI.updates, new Date().toISOString());
+    await putFile("data.json", JSON.stringify(m.data), cur.sha, `Tally answers: ${m.applied} updates`);
+    msg("tiPubMsg", `✓ ${m.applied} సమాధానాలు టీమ్ యాప్‌లోకి వెళ్ళాయి.` + (m.missing.length ? ` వదిలేసినవి (మన జాబితాలో లేవు): ${m.missing.map(esc).join(", ")}` : ""), "ok");
+  } catch (e) { msg("tiPubMsg", "Publish కాలేదు: " + esc(e.message), "err"); }
   b.disabled = false;
 };
 
