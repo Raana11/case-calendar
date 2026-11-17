@@ -163,6 +163,233 @@
       cols: ["n", "y", "d", "s", "dist", "man", "tem", "pet", "ctr", "st"], rows: out };
   }
 
+
+  /* ---------- Legal Cell results sheet (photo → OCR words) ---------- */
+  const RES_TYPES = ["WP(PIL)", "CRLRC", "CRLA", "CRP", "CMA", "WP", "WA", "CC", "SA", "AS"];
+  const OCR_DIGIT = { O: "0", Q: "0", D: "0", I: "1", L: "1", "|": "1", "!": "1", S: "5", B: "8", Z: "2", G: "6" };
+  function fixCaseVariants(raw) {
+    let t = String(raw || "").toUpperCase().replace(/\s+/g, "");
+    const pil = /\(?PIL\)?/.test(t);
+    const lm = t.match(/[A-Z]+/); if (!lm) return [];
+    let letters = lm[0].replace(/^V?W+P/, "WP").replace(/^VP/, "WP").replace(/^V?W+A/, "WA").replace(/^VA/, "WA");
+    const type = pil ? "WP(PIL)" : (["CRLRC", "CRLA", "CRP", "CMA", "WP", "WA", "CC", "SA", "AS"].find(x => letters.startsWith(x)) || "");
+    if (!type) return [];
+    let rest = (pil ? t.replace(/.*PIL\)?/, "") : letters.slice(type.replace("(PIL)", "").length) + t.slice(lm.index + lm[0].length));
+    const amb = rest.replace(/[A-Z|!]/g, ch => OCR_DIGIT[ch] || "");
+    const alts = new Set([amb]); if (/B/.test(rest)) alts.add(rest.replace(/[A-Z|!]/g, ch => ch === "B" ? "6" : (OCR_DIGIT[ch] || "")));
+    const out = [];
+    for (const r of alts) {
+      const digits = r.replace(/[^0-9]/g, ""); if (digits.length < 5) continue;
+      let parts = r.split(/[^0-9]+/).filter(Boolean), no, year;
+      if (parts.length >= 2 && /^(19|20)\d\d$/.test(parts[parts.length - 1])) { year = parts.pop(); no = parts.join(""); }
+      else { year = digits.slice(-4); no = digits.slice(0, -4); }
+      if (/^(19|20)\d\d$/.test(year) && no) out.push(`${type} ${+no}/${year}`);
+    }
+    return out;
+  }
+  function fixCase(raw) { return fixCaseVariants(raw)[0] || null; }
+  // section cell says TTD (read as "TTD", "TID", "TD", "1D"…): no "(SEC)" suffix and only T/I/1 letters before a D
+  const TTD_SEC = { test: s => { const c = String(s).toUpperCase().replace(/[^A-Z0-9|]/g, ""); return /T[TI1L|]\W?[D0O]/.test(c) || (!/S[E]?C/.test(c) && /^[TI1L|]{1,3}[D0O]$/.test(c)); } };
+  function classifyRemark(r) {
+    if (/CLOS|DISPOS|DISMISS|INFRUCT|WITHDRA/i.test(r)) return "C5";
+    if (/RE?ACH|REACT|N[O0]T\s*RE|WEEK\s*O/i.test(r)) return "C6";
+    if (/INTERIM|EXTEND/i.test(r)) return "C3";
+    if (/RESERV|JUDG/i.test(r)) return "C4";
+    if (/\bC\.?A\b|COUNTER|F[O0]R\s*CA|[lI1]orca/i.test(r)) return "C2";
+    return "C1";
+  }
+  function remarkDates(r, listIso) {
+    const out = []; const re = /(\d{1,2})\s*[.,\-\/:]\s*(\d{1,2})\s*[.,\-\/:]\s*(\d{4})/g; let m;
+    const y0 = +listIso.slice(0, 4);
+    while ((m = re.exec(r))) {
+      const d = +m[1], mo = +m[2], y = +m[3];
+      if (mo < 1 || mo > 12 || d < 1 || d > 31) { out.push({ bad: m[0] }); continue; }
+      const iso = `${y}-${pad(mo)}-${pad(d)}`;
+      if (y >= y0 && y <= y0 + 1 && iso > listIso) { out.push({ iso }); continue; }
+      const fix = [y0, y0 + 1].map(yy => `${yy}-${pad(mo)}-${pad(d)}`).find(x => x > listIso);
+      out.push(fix ? { iso: fix, fixed: m[0] } : { bad: m[0] });
+    }
+    return out;
+  }
+
+
+  function editDist(a, b) {
+    const m = a.length, n = b.length, d = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]);
+    for (let j = 1; j <= n; j++) d[0][j] = j;
+    for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++) d[i][j] = Math.min(d[i-1][j] + 1, d[i][j-1] + 1, d[i-1][j-1] + (a[i-1] === b[j-1] ? 0 : 1));
+    return d[m][n];
+  }
+  function nearestKnown(caseNo, known) {
+    const m = caseNo.match(/^(\S+) (\d+)\/(\d{4})$/); if (!m) return [];
+    let best = [], bd = 3;
+    for (const k of known) {
+      const q = k.match(/^(\S+) (\d+)\/(\d{4})$/); if (!q) continue;
+      const typeOk = q[1] === m[1] || (q[1] === "WP(PIL)" && m[1] === "WP") || (q[1] === "WP" && m[1] === "WP(PIL)");
+      if (!typeOk) continue;
+      const dist = editDist(m[2], q[2]) + (q[3] === m[3] ? 0 : 1);
+      if (dist < bd) { bd = dist; best = [k]; } else if (dist === bd) best.push(k);
+    }
+    return best;
+  }
+  // words: [{t, x0, y0, x1, y1, c}] from one photo. opts.known: Set of case numbers we already track.
+  function parseResultsWords(words, opts = {}) {
+    const known = opts.known || new Set();
+    const H = words.map(w => w.y1 - w.y0).sort((a, b) => a - b)[Math.floor(words.length / 2)] || 20;
+    const lines = [];
+    for (const w of [...words].sort((a, b) => (a.y0 + a.y1) - (b.y0 + b.y1))) {
+      const cy = (w.y0 + w.y1) / 2;
+      let ln = lines.find(l => Math.abs(l.cy - cy) < H * 0.6);
+      if (!ln) { ln = { cy, words: [] }; lines.push(ln); }
+      ln.words.push(w);
+    }
+    lines.forEach(l => l.words.sort((a, b) => a.x0 - b.x0)); lines.sort((a, b) => a.cy - b.cy);
+    let listDate = "", cols = null;
+    for (const l of lines) {
+      const txt = l.words.map(w => w.t).join(" ");
+      const dm = txt.match(/CAUSE\s*LIST\s*(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{4})/i);
+      if (dm && !listDate) listDate = `${dm[3]}-${pad(+dm[2])}-${pad(+dm[1])}`;
+      if (/REMARK/i.test(txt) && /DISTRICT/i.test(txt) && !cols) {
+        const xOf = re => { const w = l.words.find(w => re.test(w.t)); return w ? w.x0 : null; };
+        const cw = l.words.filter(w => /^CASE/i.test(w.t));
+        const item = xOf(/^ITEM/i), cas = cw[0] && cw[0].x0, stage = cw[1] && cw[1].x0, dist = xOf(/^DISTRICT/i), sec = xOf(/^SECTION/i), rem = xOf(/^REMARK/i);
+        if ([item, cas, stage, dist, sec, rem].every(v => v != null))
+          cols = { b1: (item + cas) / 2, b2: (cas + stage) / 2, b3: (stage + dist) / 2, b4: (dist + sec) / 2, b5: (sec + rem) / 2 };
+      }
+    }
+    if (!listDate) listDate = opts.listDate || "";
+    let colsGuessed = false;
+    if (!cols && opts.imgW) {   // header not readable: use the sheet's usual column proportions
+      const W = opts.imgW; colsGuessed = true;
+      cols = { b1: W * 0.096, b2: W * 0.226, b3: W * 0.394, b4: W * 0.557, b5: W * 0.723 };
+    }
+    if (!cols) return { listDate, rows: [], error: "Table header (ITEM / CASE NO / … / REMARKS) not found in photo" };
+    const colOf = x => x < cols.b1 ? "item" : x < cols.b2 ? "case" : x < cols.b3 ? "stage" : x < cols.b4 ? "dist" : x < cols.b5 ? "sec" : "rem";
+    // segment into court blocks and anchor rows
+    let court = "", rows = [], pendingRem = [];
+    const anchors = [];
+    for (const l of lines) {
+      const txt = l.words.map(w => w.t).join(" ");
+      const cm = txt.match(/C[O0]URT\s*N[O0]\.?\s*[:;.]?\s*(\d{1,2})\b/i);
+      if (cm) { court = cm[1]; anchors.push({ sep: true, cy: l.cy }); continue; }
+      if (/REMARK/i.test(txt) && /DISTRICT/i.test(txt)) { anchors.push({ sep: true, cy: l.cy }); continue; }
+      const cell = { item: [], case: [], stage: [], dist: [], sec: [], rem: [] };
+      for (const w of l.words) cell[colOf(w.x0)].push(w);
+      // try all words in the case column, then fewer (stray fragments from the next line can get attached)
+      let caseTxt = "", vs = [];
+      for (let k = cell.case.length; k >= 1 && !vs.length; k--) { caseTxt = cell.case.slice(0, k).map(w => w.t).join(""); vs = caseTxt.length >= 5 ? fixCaseVariants(caseTxt) : []; }
+      const cn = vs.find(v => known.has(v)) || vs[0] || null;
+      if (cn) anchors.push({ cy: l.cy, court, cell, caseRaw: caseTxt, caseNo: cn, conf: Math.min(...cell.case.map(w => w.c ?? 100)), extra: [] });
+      else anchors.push({ cy: l.cy, loose: cell });
+    }
+    // attach loose lines (remarks above/below the main line) to nearest anchor row within the same court block
+    const real = anchors.map((a, i) => ({ a, i })).filter(o => o.a.caseNo);
+    for (let i = 0; i < anchors.length; i++) {
+      const a = anchors[i]; if (!a.loose) continue;
+      let best = null, bd = Infinity;
+      for (const o of real) {
+        const between = anchors.slice(Math.min(i, o.i), Math.max(i, o.i)).some(x => x.sep);
+        if (between) continue;
+        const d = Math.abs(o.a.cy - a.cy); if (d < bd) { bd = d; best = o.a; }
+      }
+      if (best && bd < H * 4) best.extra.push({ cy: a.cy, cell: a.loose });
+    }
+    // second reading of the remarks column (grayscale, sharper digits) – opts.remWords already in this photo's coordinates
+    const remLines = [];
+    for (const w of (opts.remWords || []).slice().sort((p, q) => (p.y0 + p.y1) - (q.y0 + q.y1))) {
+      const cy = (w.y0 + w.y1) / 2; let ln = remLines.find(l => Math.abs(l.cy - cy) < H * 0.6);
+      if (!ln) { ln = { cy, words: [] }; remLines.push(ln); } ln.words.push(w);
+    }
+    remLines.forEach(l => l.words.sort((p, q) => p.x0 - q.x0));
+    const ys = anchors.map(x => x.cy);
+    for (const { a, i } of real) {
+      const all = [{ cy: a.cy, cell: a.cell }, ...a.extra].sort((p, q) => p.cy - q.cy);
+      const join = k => all.map(p => p.cell[k].map(w => w.t).join(" ")).filter(Boolean).join(" ").trim();
+      // row band: halfway to the previous / next real row or separator
+      let lo = -Infinity, hi = Infinity;
+      for (let j = i - 1; j >= 0; j--) if (anchors[j].sep || anchors[j].caseNo) { lo = (ys[j] + a.cy) / 2; break; }
+      for (let j = i + 1; j < anchors.length; j++) if (anchors[j].sep || anchors[j].caseNo) { hi = (ys[j] + a.cy) / 2; break; }
+      const remark2 = remLines.filter(l => l.cy > lo && l.cy <= hi).map(l => l.words.map(w => w.t).join(" ")).join(" ").trim();
+      const remark1 = join("rem"), secRaw = join("sec").toUpperCase();
+      const remark = remark2 || remark1;
+      const flags = [];
+      let caseNo = a.caseNo;
+      if (!known.has(caseNo)) {
+        const num = caseNo.split(" ")[1].split("/")[0];
+        let alt = [...known].filter(k => k.split(" ")[1] && k.split(" ")[1].split("/")[0] === num);
+        if (!alt.length) alt = nearestKnown(caseNo, known);
+        if (alt.length === 1) { flags.push(`Photo read ${caseNo} → taken as ${alt[0]}`); caseNo = alt[0]; }
+        else if (alt.length > 1) flags.push(`Not in our list – could be ${alt.slice(0, 3).join(" / ")}`);
+        else flags.push("Case not in our list – check number");
+      }
+      if (a.conf < 70 && !known.has(caseNo)) flags.push("Case number unclear in photo");
+      let C = classifyRemark(remark2 || remark1);
+      let ds = remarkDates(remark2, listDate || "2000-01-01");
+      let weak = false;
+      if (!ds.some(d => d.iso && !d.fixed)) { const d1 = remarkDates(remark1, listDate || "2000-01-01"); if (d1.some(d => d.iso)) { ds = d1; weak = true; } }
+      let next = "";
+      const good = ds.filter(d => d.iso);
+      const wk = (remark2 + " " + remark1).match(/WEEK\W*\w{0,3}\W*(\d{1,2}\s*[.,]\s*\d{1,2}\s*[.,]\s*\d{4})/i);
+      const wkd = wk ? remarkDates(wk[1], listDate || "2000-01-01")[0] : null;
+      if (C === "C6") next = wkd && wkd.iso ? wkd.iso : (good[0] ? good[0].iso : ""); else if (C !== "C5") next = good.length ? good[good.length - 1].iso : "";
+      if (ds.some(d => d.fixed)) flags.push("Year corrected from " + ds.filter(d => d.fixed).map(d => d.fixed).join(", "));
+      if (ds.some(d => d.bad)) flags.push("Date unclear: " + ds.filter(d => d.bad).map(d => d.bad).join(", "));
+      if (C === "C5" && good.length) {   // closed cases have no next date – text from the row above probably leaked in
+        C = "C1"; next = good[good.length - 1].iso; flags.push("Says CLOSED but has a next date – check");
+      }
+      if (C !== "C5" && !next) flags.push("No next date found");
+      else if (weak && C !== "C5") flags.push("Date not clear in photo – check");
+      const sc = secRaw.replace(/[^A-Z(]/g, "");
+      const sec = (sc.match(/^(DP|[A-Z])[(I1L]?S[EC]/) || sc.match(/^(DP|[A-Z])/) || [])[1] || "";
+      const kSec = opts.knownSec && opts.knownSec[caseNo];
+      if (sec && kSec && kSec.toUpperCase().replace(/[^A-Z]/g, "") !== sec && !TTD_SEC.test(secRaw)) flags.push(`Section: photo ${sec}, our list ${kSec}`);
+      rows.push({
+        court: a.court, item: join("item").replace(/[^0-9.\-, ]/g, "").trim(), caseNo, caseRaw: a.caseRaw,
+        stage: join("stage"), district: join("dist").replace(/[^A-Za-z .]/g, "").trim(), sec: TTD_SEC.test(secRaw) ? "TTD" : sec,
+        ttd: TTD_SEC.test(secRaw), remark, C, next, flags
+      });
+    }
+    return { listDate, rows, colsGuessed };
+  }
+
+  // several readings of the same photo → keep, per case, the reading that matches a known case with fewest doubts
+  function mergeResultReadings(readings, known) {
+    const best = new Map(), order = [];
+    const score = r => (known.has(r.caseNo) ? 10 : 0) - r.flags.length + (r.next ? 1 : 0);
+    for (const rows of readings) for (const r of rows) {
+      const cur = best.get(r.caseNo);
+      if (!cur) { best.set(r.caseNo, r); order.push(r.caseNo); continue; }
+      let pick = score(r) > score(cur) ? r : cur, other = pick === r ? cur : r;
+      if (!pick.next && other.next && pick.C === other.C) pick = { ...pick, next: other.next, flags: [...other.flags.filter(f => /Date|date/.test(f)), ...pick.flags.filter(f => !/next date/i.test(f))] };
+      best.set(r.caseNo, pick);
+    }
+    // a misread number that was not matched to a known case is dropped when the known case was found in another reading at the same court/item
+    const out = order.map(k => best.get(k));
+    return out.filter(r => known.has(r.caseNo) || !out.some(o => o !== r && known.has(o.caseNo) && o.court === r.court && o.item && o.item === r.item));
+  }
+
+
+  // apply checked result rows to the team data.json (same shape the app reads)
+  function applyResults(old, listDate, rows, nowIso) {
+    const cases = new Map((old.cases || []).map(c => [c.k, { ...c, ds: [...(c.ds || (c.d ? [c.d] : []))] }]));
+    const status = { ...(old.status || {}) };
+    let added = 0, updated = 0;
+    const dm = listDate ? listDate.slice(8, 10) + "-" + listDate.slice(5, 7) : "";
+    for (const r of rows) {
+      const k = keyOf(r.caseNo); let c = cases.get(k);
+      if (!c) { c = { k, n: r.caseNo, ds: [] }; cases.set(k, c); added++; } else updated++;
+      const ds = new Set(c.ds); if (listDate) ds.add(listDate); if (r.next) ds.add(r.next);
+      c.ds = [...ds].sort(); c.d = c.ds[c.ds.length - 1];
+      if (r.sec) c.s = r.sec.toUpperCase();
+      if (r.district && !c.dist) c.dist = r.district;
+      if (r.court) c.ct = `Court ${r.court}` + (r.item ? ` · Item ${r.item}` : "");
+      const st = { ...(status[k] || {}), C: r.C, note: (dm ? dm + ": " : "") + (r.remark || "").trim() };
+      if (r.next) st.nd = r.next; else delete st.nd;
+      status[k] = st;
+    }
+    const list = [...cases.values()].sort((a, b) => a.n.localeCompare(b.n));
+    return { data: { ...old, meta: { ...(old.meta || {}), at: nowIso, count: list.length, results: listDate }, cases: list, status }, added, updated };
+  }
+
   /* ---------- match + segregate ---------- */
 
   const COUNTER_LABEL = { filed: "Counter filed", notfiled: "Counter NOT filed", proforma: "Formal party", blank: "Status blank in endowmentsinfo", missing: "Not in endowmentsinfo" };
@@ -277,6 +504,6 @@
     return `*${title}* (${rows.length})\n` + rows.map((r, i) => `${i + 1}. ` + cols.map(c => r[c]).filter(v => v !== "" && v != null && v !== "—").join(" | ")).join("\n");
   }
 
-  const api = { buildCasesInfo, pdfToLines, parseCauseList, parseEndowmentsInfo, buildReport, mergeData, tables, toWhatsApp, keyOf, COUNTER_LABEL };
+  const api = { mergeResultReadings, applyResults, parseResultsWords, classifyRemark, fixCase, fixCaseVariants, buildCasesInfo, pdfToLines, parseCauseList, parseEndowmentsInfo, buildReport, mergeData, tables, toWhatsApp, keyOf, COUNTER_LABEL };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.CCEngine = api;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -7,6 +7,7 @@
 <meta name="theme-color" content="#7a2e1d">
 <title>Update Dashboard – Case Calendar</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
 <script src="engine.js"></script>
 <style>
   :root{--bg:#faf7f2;--card:#fff;--ink:#1f1a17;--muted:#6b625b;--line:#e7dfd5;--brand:#7a2e1d;--soft:#f3e8dc;--ok:#2f7a3d;--warn:#a86a00;--bad:#a32020}
@@ -29,6 +30,9 @@
   .pill{font-size:12px;border-radius:99px;padding:1px 8px;white-space:nowrap} .pf{background:#e6f5e9;color:#1c5226} .pn{background:#fde8e8;color:#7a1414} .pp{background:#e6f0ff;color:#1d4a8f} .pb{background:#fff6dc;color:#5c4300} .pm{background:#eee;color:#444}
   pre.wa{white-space:pre-wrap;background:var(--soft);border-radius:8px;padding:10px;font-size:13px;max-height:260px;overflow:auto}
   .hidden{display:none!important} progress{width:100%}
+  tr.flag td{background:#fff6dc} @media (prefers-color-scheme:dark){tr.flag td{background:#3a2e10}}
+  td .fl{font-size:12px;color:#8a5a00} td select,td input[type=date],td input.w{padding:4px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink);font:inherit;font-size:13px}
+  td input.w{width:100%;min-width:180px}
 </style>
 </head>
 <body>
@@ -99,6 +103,22 @@
     <label class="note"><input type="checkbox" id="pubCI" checked> టీమ్ యాప్ "Dashboard" ట్యాబ్ (cases-info.json) కూడా ఈ Excel తో అప్‌డేట్ చేయి</label>
     <div class="row" style="margin-top:8px"><button class="btn p" id="publish">Publish</button></div>
     <div id="pubMsg"></div>
+  </div>
+
+  <!-- RESULTS (court results photos) -->
+  <div class="card" id="resCard">
+    <h2>📸 కోర్టు ఫలితాలు (Legal Cell షీట్ ఫోటోలు)</h2>
+    <p class="note">"ENDOWMENTS CAUSE LIST dd.mm.yyyy" ఫలితాల షీట్ ఫోటోలు (ఒకటి లేదా ఎక్కువ) ఎంచుకోండి. ఫోటో చదివి C కోడ్, తదుపరి తేదీ సూచిస్తుంది. <b>పసుపు వరుసలు తప్పక సరిచూడండి</b> – ఫోటో అస్పష్టంగా ఉన్న చోట్లు.</p>
+    <input type="file" id="fRes" accept="image/*" multiple>
+    <div class="row" style="margin-top:8px"><button class="btn p" id="resRun" disabled>ఫోటోలు చదువు</button></div>
+    <progress id="resProg" class="hidden" max="100" value="0"></progress>
+    <div id="resMsg"></div>
+    <div id="resBox" class="hidden">
+      <div class="row" style="margin:6px 0"><label class="note">ఫలితాల తేదీ <input type="date" id="resDate"></label><span class="note" id="resCount"></span></div>
+      <div class="tw" id="resTable"></div>
+      <div class="row" style="margin-top:8px"><button class="btn" id="resCopy">WhatsApp కి కాపీ</button><button class="btn p" id="resPub">ఫలితాలు Publish</button></div>
+      <div id="resPubMsg"></div>
+    </div>
   </div>
 
   <!-- HISTORY -->
@@ -322,6 +342,99 @@ $("publish").onclick = async () => {
     msg("pubMsg", `✓ Publish అయింది. టీమ్ యాప్‌లో 1–2 నిమిషాల్లో ${fmtD(REPORT.date)} కేసులు కనిపిస్తాయి.`, "ok");
   } catch (e) { msg("pubMsg", "Publish కాలేదు: " + esc(e.message), "err"); }
   btn.disabled = false;
+};
+
+/* ---------- court results from photos ---------- */
+const C_OPTS = [["C1","Adjourned / next date"],["C2","For counter"],["C3","Interim order"],["C4","Judgment reserved"],["C5","Disposed / closed"],["C6","Not reached"]];
+let RES = null, resFiles = [], ocrWorker = null;
+$("fRes").onchange = e => { resFiles = [...e.target.files]; $("resRun").disabled = !resFiles.length; };
+function loadImg(file) { return new Promise((ok, bad) => { const u = URL.createObjectURL(file), im = new Image(); im.onload = () => ok(im); im.onerror = bad; im.src = u; }); }
+// black-and-white 3x at two darkness levels with table rules erased (structure), grayscale 4x remarks column (dates)
+function prepImages(im) {
+  const W = im.naturalWidth, H = im.naturalHeight, S = 3;
+  const c = document.createElement("canvas"); c.width = W * S; c.height = H * S;
+  const x = c.getContext("2d", { willReadFrequently: true }); x.imageSmoothingQuality = "high"; x.drawImage(im, 0, 0, c.width, c.height);
+  const src = x.getImageData(0, 0, c.width, c.height).data, w = c.width, h = c.height, gray = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) gray[i] = 0.299 * src[i*4] + 0.587 * src[i*4+1] + 0.114 * src[i*4+2];
+  const bwAt = th => {
+    const dark = new Uint8Array(w * h); for (let i = 0; i < w * h; i++) dark[i] = gray[i] < th ? 1 : 0;
+    const rows = [], cols = [];
+    for (let y = 0; y < h; y++) { let n = 0; for (let xx = 0; xx < w; xx++) n += dark[y*w+xx]; if (n > w * 0.5) rows.push(y); }
+    for (let xx = 0; xx < w; xx++) { let n = 0; for (let y = 0; y < h; y++) n += dark[y*w+xx]; if (n > h * 0.35) cols.push(xx); }
+    for (const y of rows) for (let k = Math.max(0, y-2); k <= Math.min(h-1, y+2); k++) dark.fill(0, k*w, k*w + w);
+    for (const xx of cols) for (let k = Math.max(0, xx-2); k <= Math.min(w-1, xx+2); k++) for (let y = 0; y < h; y++) dark[y*w+k] = 0;
+    const o = document.createElement("canvas"); o.width = w; o.height = h; const ox = o.getContext("2d"), d = ox.createImageData(w, h);
+    for (let i = 0; i < w * h; i++) { const v = dark[i] ? 0 : 255; d.data[i*4] = d.data[i*4+1] = d.data[i*4+2] = v; d.data[i*4+3] = 255; }
+    ox.putImageData(d, 0, 0); return o;
+  };
+  const off = Math.floor(W * 0.70), R = 4, rc = document.createElement("canvas"); rc.width = (W - off) * R; rc.height = H * R;
+  const rx = rc.getContext("2d"); rx.imageSmoothingQuality = "high"; rx.filter = "grayscale(1)"; rx.drawImage(im, off, 0, W - off, H, 0, 0, rc.width, rc.height);
+  return { bws: [bwAt(160), bwAt(175)], rem: rc, remOff: off * S, remScale: S / R, imgW: w };
+}
+async function ocrWords(canvas) {
+  const r = await ocrWorker.recognize(canvas, {}, { blocks: true });
+  const out = []; for (const b of r.data.blocks || []) for (const pp of b.paragraphs) for (const l of pp.lines) for (const wd of l.words) out.push({ t: wd.text, x0: wd.bbox.x0, y0: wd.bbox.y0, x1: wd.bbox.x1, y1: wd.bbox.y1, c: wd.confidence });
+  return out;
+}
+$("resRun").onclick = async () => {
+  $("resRun").disabled = true; msg("resMsg", ""); const pg = $("resProg"); pg.classList.remove("hidden"); pg.value = 3;
+  try {
+    let base = OLD; if (!base) { const r = await fetch("data.json?t=" + Date.now(), { cache: "no-store" }); base = r.ok ? await r.json() : { cases: [] }; }
+    const known = new Set((base.cases || []).map(c => c.n)), knownSec = Object.fromEntries((base.cases || []).map(c => [c.n, c.s || ""]));
+    if (!ocrWorker) { msg("resMsg", "మొదటిసారి OCR సిద్ధం అవుతోంది (~10 MB డౌన్‌లోడ్)…"); ocrWorker = await Tesseract.createWorker("eng", 1, { langPath: "https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng@1.0.0/4.0.0_best_int" }); await ocrWorker.setParameters({ tessedit_pageseg_mode: "6", preserve_interword_spaces: "1" }); }
+    const rows = []; let listDate = "";
+    for (let i = 0; i < resFiles.length; i++) {
+      msg("resMsg", `ఫోటో ${i + 1}/${resFiles.length} చదువుతోంది…`);
+      const im = await loadImg(resFiles[i]); const P = prepImages(im);
+      const step = k => { pg.value = Math.round(100 * (i + k / 3) / resFiles.length); };
+      const rw = (await ocrWords(P.rem)).map(w => ({ ...w, x0: w.x0 * P.remScale + P.remOff, x1: w.x1 * P.remScale + P.remOff, y0: w.y0 * P.remScale, y1: w.y1 * P.remScale }));
+      step(1); const readings = [];
+      for (const [j, bw] of P.bws.entries()) {
+        const r = E.parseResultsWords(await ocrWords(bw), { known, knownSec, remWords: rw, listDate, imgW: P.imgW });
+        if (!r.error) { readings.push(r.rows); listDate = listDate || r.listDate; } step(2 + j);
+      }
+      if (!readings.some(r => r.length)) throw new Error(`ఫోటో ${i + 1}: పట్టిక చదవలేకపోయాను. ఫోటో పూర్తిగా, నిటారుగా, స్పష్టంగా ఉండాలి.`);
+      rows.push(...E.mergeResultReadings(readings, known));
+    }
+    const seen = new Set();
+    RES = rows.filter(r => { if (seen.has(r.caseNo)) return false; seen.add(r.caseNo); return true; })
+      .map(r => ({ ...r, use: !r.ttd && !r.flags.some(f => /not in our list/i.test(f)) }));
+    $("resDate").value = listDate || todayISO();
+    renderRes(); $("resBox").classList.remove("hidden");
+    msg("resMsg", `✓ ${RES.length} వరుసలు చదివాను. పసుపు వరుసలు ${RES.filter(r => r.flags.length).length} – వాటిని ఫోటోతో సరిచూడండి.`, "ok");
+  } catch (e) { msg("resMsg", "తప్పు: " + esc(e.message || e), "err"); }
+  pg.classList.add("hidden"); $("resRun").disabled = false;
+};
+function renderRes() {
+  $("resCount").textContent = `${RES.filter(r => r.use).length} కేసులు Publish అవుతాయి`;
+  $("resTable").innerHTML = `<table><tr><th>చేర్చు</th><th>Case</th><th>Court / Item</th><th>Sec</th><th>ఫలితం</th><th>తదుపరి తేదీ</th><th>Remark (ఫోటో నుంచి)</th></tr>` +
+    RES.map((r, i) => `<tr class="${r.flags.length ? "flag" : ""}"><td><input type="checkbox" data-ri="${i}" data-f="use" ${r.use ? "checked" : ""}></td>
+    <td><input class="w" style="min-width:120px" data-ri="${i}" data-f="caseNo" value="${esc(r.caseNo)}">${r.ttd ? `<div class="fl">TTD – తొలగించబడింది</div>` : ""}${r.flags.map(f => `<div class="fl">⚠ ${esc(f)}</div>`).join("")}</td>
+    <td>${esc(r.court)} / ${esc(r.item)}</td><td><input class="w" style="min-width:40px;width:50px" data-ri="${i}" data-f="sec" value="${esc(r.sec)}"></td>
+    <td><select data-ri="${i}" data-f="C">${C_OPTS.map(([c, l]) => `<option value="${c}" ${c === r.C ? "selected" : ""}>${c} ${l}</option>`).join("")}</select></td>
+    <td><input type="date" data-ri="${i}" data-f="next" value="${esc(r.next)}"></td>
+    <td><input class="w" data-ri="${i}" data-f="remark" value="${esc(r.remark)}"></td></tr>`).join("") + `</table>`;
+}
+$("resTable").addEventListener("change", e => {
+  const t = e.target, i = t.dataset.ri; if (i == null) return;
+  const r = RES[+i], f = t.dataset.f;
+  if (f === "use") r.use = t.checked; else if (f === "caseNo") r.caseNo = t.value.trim().toUpperCase().replace(/\s+/g, " "); else r[f] = t.value.trim();
+  if (f === "use") $("resCount").textContent = `${RES.filter(r => r.use).length} కేసులు Publish అవుతాయి`;
+});
+$("resCopy").onclick = () => copy(E.toWhatsApp(`కోర్టు ఫలితాలు ${$("resDate").value}`, RES.filter(r => r.use).map(r => ({ Case: r.caseNo, Court: r.court, Item: r.item, Sec: r.sec, Result: r.C, Next: r.next, Remark: r.remark }))), "resCopy");
+$("resPub").onclick = async () => {
+  if (!token) { msg("resPubMsg", "ముందు పైన GitHub key సేవ్ చేయండి.", "err"); return; }
+  const bad = RES.filter(r => r.use && !/^[A-Z()]+ \d+\/\d{4}$/.test(r.caseNo));
+  if (bad.length) { msg("resPubMsg", "ఈ కేసు నంబర్లు సరిగ్గా లేవు: " + bad.map(r => esc(r.caseNo)).join(", "), "err"); return; }
+  const b = $("resPub"); b.disabled = true; msg("resPubMsg", "Publish అవుతోంది…");
+  try {
+    const listDate = $("resDate").value, cur = await getFile("data.json");
+    await putFile(`history/${stamp()}.json`, cur.text, null, `Backup before results ${listDate}`);
+    const m = E.applyResults(JSON.parse(cur.text), listDate, RES.filter(r => r.use), new Date().toISOString());
+    await putFile("data.json", JSON.stringify(m.data), cur.sha, `Court results ${listDate}: ${m.updated + m.added} cases (+${m.added} new)`);
+    msg("resPubMsg", `✓ ${m.updated + m.added} కేసుల ఫలితాలు Publish అయ్యాయి. టీమ్ యాప్‌లో 1–2 నిమిషాల్లో కనిపిస్తాయి.`, "ok");
+  } catch (e) { msg("resPubMsg", "Publish కాలేదు: " + esc(e.message), "err"); }
+  b.disabled = false;
 };
 
 /* ---------- history / rollback ---------- */
