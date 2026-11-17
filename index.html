@@ -79,6 +79,30 @@
   table.map select{width:100%}
   ol{padding-left:20px} ol li{margin-bottom:6px}
   .hidden{display:none!important}
+  /* dashboard */
+  .dfil{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:10px}
+  .dfil select,.dfil input{width:100%;min-width:0}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:10px}
+  .tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px}
+  .tile .big{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
+  .tile .lbl{font-size:12px;color:var(--muted)}
+  .tile.w .big{color:var(--warn)} .tile.b .big{color:var(--bad)} .tile.o .big{color:var(--ok)} .tile.n .big{color:var(--brand)}
+  .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:6px}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+  .k-nf{background:var(--bad)} .k-f{background:var(--ok)} .k-na{background:var(--muted)}
+  .hb{display:grid;grid-template-columns:minmax(60px,30%) 1fr 44px;align-items:center;gap:6px;padding:3px 0;border:0;background:none;width:100%;font:inherit;color:inherit;text-align:left;cursor:pointer;border-radius:6px}
+  .hb:hover{background:var(--soft)} .hb.sel{background:var(--soft);outline:1px solid var(--brand2)}
+  .hb .l{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hb .t{display:flex;height:14px;border-radius:3px;overflow:hidden;background:var(--soft)}
+  .hb .t span{display:block;height:100%}
+  .hb .v{font-size:12px;text-align:right;font-variant-numeric:tabular-nums}
+  .tw{overflow-x:auto;max-height:520px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+  table.dt{border-collapse:collapse;width:100%;font-size:13px}
+  table.dt th{position:sticky;top:0;background:var(--card);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);color:var(--muted);font-weight:600;white-space:nowrap}
+  table.dt td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  table.dt td.w{min-width:160px}
+  .pill{font-size:11px;border-radius:99px;padding:1px 7px;border:1px solid currentColor;white-space:nowrap}
+  .pill.p{color:var(--warn)} .pill.d{color:var(--ok)} .pill.nf{color:var(--bad)} .pill.na{color:var(--muted)}
   .group-date{font-weight:650;margin:12px 0 6px;color:var(--brand)}
 </style>
 </head>
@@ -89,6 +113,7 @@
   <nav id="tabs">
     <button data-t="cal" class="on">Calendar</button>
     <button data-t="up">Upcoming</button>
+    <button data-t="dash">Dashboard</button>
     <button data-t="find">Search</button>
     <button data-t="inst">Install</button>
   </nav>
@@ -131,6 +156,40 @@
   <section id="v-up" class="hidden">
     <p class="note">Next 14 days, date-wise.</p>
     <div id="upList"></div>
+  </section>
+
+  <!-- DASHBOARD -->
+  <section id="v-dash" class="hidden">
+    <p class="note" id="dNote">All endowmentsinfo cases (TTD matters left out). Loading…</p>
+    <div class="dfil">
+      <select id="dDist" aria-label="District"><option value="">All districts</option></select>
+      <select id="dMan" aria-label="Mandal"><option value="">All mandals</option></select>
+      <select id="dSec" aria-label="Section"><option value="">All sections</option></select>
+      <select id="dSt" aria-label="Case status"><option value="">All statuses</option></select>
+      <select id="dCtr" aria-label="Counter"><option value="">Counter: all</option><option value="nf">Counter not filed</option><option value="f">Counter filed</option><option value="na">Not required (formal party)</option></select>
+      <input id="dQ" type="search" inputmode="numeric" placeholder="Case number" aria-label="Case number">
+      <button class="btn" id="dReset" type="button">Clear filters</button>
+    </div>
+    <div class="tiles">
+      <div class="tile n"><div class="big" id="kTot">–</div><div class="lbl">Total cases</div></div>
+      <div class="tile w"><div class="big" id="kPen">–</div><div class="lbl">Pending</div></div>
+      <div class="tile b"><div class="big" id="kCtr">–</div><div class="lbl">Pending counters (not filed)</div></div>
+      <div class="tile"><div class="big" id="k7">–</div><div class="lbl">Listed next 7 days</div></div>
+      <div class="tile o"><div class="big" id="kDis">–</div><div class="lbl">Disposed</div></div>
+    </div>
+    <div class="card">
+      <h2 style="margin-top:0">Pending cases by section</h2>
+      <div class="legend"><span><i class="k-nf"></i>Counter not filed</span><span><i class="k-f"></i>Counter filed</span><span><i class="k-na"></i>Not required</span></div>
+      <div id="chSec"></div>
+      <p class="note">Tap a bar to filter by that section.</p>
+    </div>
+    <div class="card">
+      <h2 style="margin-top:0">Pending cases by district</h2>
+      <div id="chDist"></div>
+      <p class="note">Top 15 districts. Tap a bar to filter.</p>
+    </div>
+    <h2>Cases <span class="note" id="dCount"></span></h2>
+    <div class="tw"><table class="dt"><thead><tr><th>Case no.</th><th>Year</th><th>Listing</th><th>Sec.</th><th>District</th><th>Mandal</th><th>Temple</th><th>Petitioner</th><th>Counter</th><th>Status</th></tr></thead><tbody id="dRows"></tbody></table></div>
   </section>
 
   <!-- SEARCH -->
@@ -337,6 +396,7 @@
     if (view === "cal") renderCal();
     else if (view === "up") renderUp();
     else if (view === "find") renderFind();
+    else if (view === "dash" && window.renderDash) window.renderDash();
   }
 
   // ---------- events ----------
@@ -344,8 +404,8 @@
     const b = e.target.closest("button[data-t]"); if (!b) return;
     view = b.dataset.t;
     document.querySelectorAll("nav button").forEach(x => x.classList.toggle("on", x === b));
-    ["cal","up","find","inst"].forEach(v => $("v-"+v).classList.toggle("hidden", v !== view));
-    $("filters").classList.toggle("hidden", view === "inst");
+    ["cal","up","dash","find","inst"].forEach(v => $("v-"+v).classList.toggle("hidden", v !== view));
+    $("filters").classList.toggle("hidden", view === "inst" || view === "dash");
     render();
   });
   $("fSec").onchange = $("fSt").onchange = render;
@@ -392,6 +452,102 @@
     }
   })();
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+})();
+</script>
+<script>
+// ---------- Dashboard tab (all endowmentsinfo cases from cases-info.json) ----------
+(() => {
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const pad = n => String(n).padStart(2,"0");
+  const isoOf = d => d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+  const nf = n => n.toLocaleString("en-IN");
+  const fmtD = iso => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso||""); return m ? m[3]+"-"+m[2]+"-"+m[1] : (iso||""); };
+  const ctrKind = c => c === "filed" ? "f" : /^need not/.test(c) ? "na" : "nf";
+  const secLabel = s => (!s || s === "-") ? "Not mapped" : s;
+  let rows = null, loading = false, failed = false;
+  const F = {dist:"", man:"", sec:"", st:"", ctr:"", q:""};
+
+  async function load(){
+    if (rows || loading) return; loading = true;
+    try {
+      const r = await fetch("cases-info.json?t=" + Date.now(), { cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const j = await r.json();
+      const ix = Object.fromEntries(j.cols.map((c,i) => [c,i]));
+      rows = j.rows.map(a => ({n:a[ix.n], y:a[ix.y], d:a[ix.d], s:a[ix.s], dist:a[ix.dist], man:a[ix.man], tem:a[ix.tem], pet:a[ix.pet], ctr:a[ix.ctr], st:a[ix.st]}));
+      const at = j.meta && j.meta.at ? new Date(j.meta.at).toLocaleString("en-IN",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"}) : "";
+      $("dNote").textContent = `All endowmentsinfo cases, ${nf(rows.length)} in all (TTD matters left out). Data as of ${at}.`;
+      fillSelects();
+    } catch (e) {
+      failed = true;
+      $("dNote").textContent = "Could not load the dashboard data. Check your internet and reopen this tab.";
+    }
+    loading = false; render();
+  }
+
+  const uniq = (arr, k) => [...new Set(arr.map(r => r[k]).filter(Boolean))].sort((a,b) => a.localeCompare(b));
+  function setOpts(sel, vals, all, cur, lab){
+    sel.innerHTML = `<option value="">${all}</option>` + vals.map(v => `<option value="${esc(v)}">${esc(lab ? lab(v) : v)}</option>`).join("");
+    sel.value = vals.includes(cur) ? cur : "";
+  }
+  function fillSelects(){
+    setOpts($("dDist"), uniq(rows,"dist"), "All districts", F.dist);
+    setOpts($("dMan"), uniq(rows.filter(r => !F.dist || r.dist === F.dist),"man"), "All mandals", F.man);
+    setOpts($("dSec"), uniq(rows,"s"), "All sections", F.sec, secLabel);
+    setOpts($("dSt"), uniq(rows,"st"), "All statuses", F.st);
+  }
+
+  function filtered(){
+    const q = F.q.trim();
+    return rows.filter(r => (!F.dist || r.dist === F.dist) && (!F.man || r.man === F.man) && (!F.sec || r.s === F.sec)
+      && (!F.st || r.st === F.st) && (!F.ctr || ctrKind(r.ctr) === F.ctr) && (!q || String(r.n).includes(q)));
+  }
+
+  function bars(el, data, max, key, picked, onPick){
+    if (!data.length){ el.innerHTML = `<div class="empty">No pending cases for these filters.</div>`; return; }
+    const top = Math.max(...data.map(d => d.nf + d.f + d.na)) || 1;
+    el.innerHTML = data.slice(0, max).map(d => {
+      const t = d.nf + d.f + d.na, w = v => (v / top * 100).toFixed(2) + "%";
+      return `<button type="button" class="hb${picked === d.key ? " sel" : ""}" data-k="${esc(d.key)}" title="${esc(d.label)}: ${d.nf} not filed, ${d.f} filed, ${d.na} not required">
+        <span class="l">${esc(d.label)}</span>
+        <span class="t"><span class="k-nf" style="width:${w(d.nf)}"></span><span class="k-f" style="width:${w(d.f)}"></span><span class="k-na" style="width:${w(d.na)}"></span></span>
+        <span class="v">${nf(t)}</span></button>`;
+    }).join("");
+    el.onclick = e => { const b = e.target.closest(".hb"); if (b) onPick(b.dataset.k); };
+  }
+  function group(arr, key, label){
+    const m = new Map();
+    arr.forEach(r => { if (r.st !== "Pending") return; const k = r[key] || "-"; const o = m.get(k) || {key:k, label:label(k), nf:0, f:0, na:0}; o[ctrKind(r.ctr)]++; m.set(k, o); });
+    return [...m.values()].sort((a,b) => (b.nf+b.f+b.na) - (a.nf+a.f+a.na));
+  }
+
+  function render(){
+    if (!rows){ if (!failed) load(); return; }
+    const arr = filtered();
+    const t0 = isoOf(new Date()), t7 = isoOf(new Date(Date.now() + 7*864e5));
+    let pen = 0, ctr = 0, dis = 0, l7 = 0;
+    arr.forEach(r => { if (r.st === "Pending"){ pen++; if (ctrKind(r.ctr) === "nf") ctr++; } if (r.st === "Disposed") dis++; if (r.d && r.d >= t0 && r.d <= t7) l7++; });
+    $("kTot").textContent = nf(arr.length); $("kPen").textContent = nf(pen); $("kCtr").textContent = nf(ctr); $("k7").textContent = nf(l7); $("kDis").textContent = nf(dis);
+    bars($("chSec"), group(arr, "s", secLabel), 40, "s", F.sec, k => { F.sec = F.sec === k ? "" : k; $("dSec").value = F.sec; render(); });
+    bars($("chDist"), group(arr, "dist", k => k), 15, "dist", F.dist, k => { F.dist = F.dist === k ? "" : k; F.man = ""; fillSelects(); render(); });
+    const list = [...arr].sort((a,b) => (b.d||"").localeCompare(a.d||"")).slice(0, 200);
+    $("dCount").textContent = arr.length > 200 ? `(latest 200 of ${nf(arr.length)})` : `(${nf(arr.length)})`;
+    $("dRows").innerHTML = list.length ? list.map(r => {
+      const k = ctrKind(r.ctr), cp = r.ctr ? `<span class="pill ${k}">${esc(r.ctr)}</span>` : "";
+      const sp = `<span class="pill ${r.st === "Pending" ? "p" : r.st === "Disposed" ? "d" : "na"}">${esc(r.st)}</span>`;
+      return `<tr><td>${esc(r.n)}</td><td>${esc(r.y)}</td><td style="white-space:nowrap">${esc(fmtD(r.d))}</td><td>${esc(r.s)}</td><td>${esc(r.dist)}</td><td>${esc(r.man)}</td><td class="w">${esc(r.tem)}</td><td class="w">${esc(r.pet)}</td><td>${cp}</td><td>${sp}</td></tr>`;
+    }).join("") : `<tr><td colspan="10" class="empty">No cases match these filters.</td></tr>`;
+  }
+
+  $("dDist").onchange = e => { F.dist = e.target.value; F.man = ""; fillSelects(); render(); };
+  $("dMan").onchange = e => { F.man = e.target.value; render(); };
+  $("dSec").onchange = e => { F.sec = e.target.value; render(); };
+  $("dSt").onchange = e => { F.st = e.target.value; render(); };
+  $("dCtr").onchange = e => { F.ctr = e.target.value; render(); };
+  $("dQ").oninput = e => { clearTimeout(window._dqt); window._dqt = setTimeout(() => { F.q = e.target.value; render(); }, 200); };
+  $("dReset").onclick = () => { Object.keys(F).forEach(k => F[k] = ""); $("dCtr").value = ""; $("dQ").value = ""; if (rows) fillSelects(); render(); };
+  window.renderDash = render;
 })();
 </script>
 </body>
