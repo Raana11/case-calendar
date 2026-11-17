@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="te">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#7a2e1d">
+<title>Update Dashboard – Case Calendar</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="engine.js"></script>
+<style>
+  :root{--bg:#faf7f2;--card:#fff;--ink:#1f1a17;--muted:#6b625b;--line:#e7dfd5;--brand:#7a2e1d;--soft:#f3e8dc;--ok:#2f7a3d;--warn:#a86a00;--bad:#a32020}
+  @media (prefers-color-scheme:dark){:root{--bg:#16130f;--card:#211c17;--ink:#f2ebe3;--muted:#a99d91;--line:#3a312a;--brand:#e2885f;--soft:#2e241c;--ok:#6cc07b;--warn:#e2ad4a;--bad:#ef7a7a}}
+  *{box-sizing:border-box} body{margin:0;font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Telugu",sans-serif;background:var(--bg);color:var(--ink)}
+  header{background:#7a2e1d;color:#fff;padding:14px 16px} header h1{margin:0;font-size:18px} header p{margin:4px 0 0;font-size:13px;opacity:.85}
+  main{max-width:1000px;margin:0 auto;padding:12px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+  .card h2{font-size:16px;margin:0 0 8px;display:flex;gap:8px;align-items:center}
+  .step{background:var(--brand);color:#fff;border-radius:99px;width:24px;height:24px;display:inline-grid;place-items:center;font-size:13px}
+  .note{font-size:13px;color:var(--muted)} label.f{display:block;margin:8px 0 4px;font-weight:600}
+  input,select,button{font:inherit;color:var(--ink)} input[type=text],input[type=password],select{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px;width:100%}
+  .btn{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:8px 14px;cursor:pointer} .btn.p{background:#7a2e1d;color:#fff;border-color:#7a2e1d} .btn:disabled{opacity:.5;cursor:default}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .msg{padding:10px;border-radius:10px;margin:8px 0;font-size:14px} .msg.warn{background:#fff6dc;color:#5c4300;border:1px solid #f0dc9c} .msg.err{background:#fde8e8;color:#7a1414;border:1px solid #f3c1c1} .msg.ok{background:#e6f5e9;color:#1c5226;border:1px solid #bfe3c6}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 10px} .tabs button{border:1px solid var(--line);background:var(--card);border-radius:99px;padding:6px 12px;cursor:pointer;font-size:14px} .tabs button.on{background:#7a2e1d;color:#fff;border-color:#7a2e1d}
+  .tabs b{font-weight:700;margin-left:4px}
+  .tw{overflow-x:auto} table{border-collapse:collapse;width:100%;font-size:13.5px} th,td{border-bottom:1px solid var(--line);padding:6px;text-align:left;vertical-align:top} th{background:var(--soft);position:sticky;top:0}
+  td input[type=text]{width:70px;padding:4px}
+  .pill{font-size:12px;border-radius:99px;padding:1px 8px;white-space:nowrap} .pf{background:#e6f5e9;color:#1c5226} .pn{background:#fde8e8;color:#7a1414} .pp{background:#e6f0ff;color:#1d4a8f} .pb{background:#fff6dc;color:#5c4300} .pm{background:#eee;color:#444}
+  pre.wa{white-space:pre-wrap;background:var(--soft);border-radius:8px;padding:10px;font-size:13px;max-height:260px;overflow:auto}
+  .hidden{display:none!important} progress{width:100%}
+</style>
+</head>
+<body>
+<header>
+  <h1>⚙️ Update Dashboard – Court Case Calendar</h1>
+  <p>కాజ్ లిస్ట్ PDF + endowmentsinfo Excel → సరిచూడండి → Publish. టీమ్ యాప్: <a style="color:#fff" href="./">raana11.github.io/case-calendar</a></p>
+</header>
+<main>
+
+  <!-- SETUP -->
+  <div class="card" id="setupCard">
+    <h2>🔑 GitHub key (ఒక్కసారి మాత్రమే)</h2>
+    <div id="keyState" class="note"></div>
+    <div id="keyForm">
+      <label class="f" for="tok">GitHub key (token)</label>
+      <input type="password" id="tok" placeholder="github_pat_..." autocomplete="off">
+      <div class="row" style="margin-top:8px"><button class="btn p" id="saveTok">Save & test</button></div>
+      <details style="margin-top:8px"><summary class="note">Key ఎలా తయారు చేయాలి?</summary>
+        <ol class="note">
+          <li>github.com/settings/personal-access-tokens/new తెరవండి (Raana11 గా లాగిన్).</li>
+          <li>Token name: <b>case-calendar-dashboard</b>, Expiration: 90 days.</li>
+          <li>Repository access → <b>Only select repositories</b> → <b>case-calendar</b>.</li>
+          <li>Permissions → Repository permissions → <b>Contents: Read and write</b>.</li>
+          <li><b>Generate token</b> నొక్కి, వచ్చిన key కాపీ చేసి పైన పేస్ట్ చేయండి.</li>
+        </ol>
+        <p class="note">Key ఈ ఫోన్/కంప్యూటర్ బ్రౌజర్‌లో మాత్రమే ఉంటుంది. ఎవరికీ పంపవద్దు.</p>
+      </details>
+    </div>
+  </div>
+
+  <!-- STEP 1 -->
+  <div class="card">
+    <h2><span class="step">1</span> ఫైళ్ళు ఎంచుకోండి</h2>
+    <label class="f" for="fPdf">హైకోర్టు కాజ్ లిస్ట్ (PDF)</label>
+    <input type="file" id="fPdf" accept="application/pdf,.pdf">
+    <label class="f" for="fXls">endowmentsinfo Court_Cases_Report (Excel) – ఈ రోజుది</label>
+    <input type="file" id="fXls" accept=".xls,.xlsx">
+    <div id="freshWarn"></div>
+    <div class="row" style="margin-top:10px"><button class="btn p" id="run" disabled>సరిపోల్చు (Process)</button></div>
+    <progress id="prog" class="hidden" max="100" value="0"></progress>
+    <div id="runMsg"></div>
+  </div>
+
+  <!-- STEP 2 -->
+  <div class="card hidden" id="verifyCard">
+    <h2><span class="step">2</span> సరిచూడండి (Verification)</h2>
+    <div id="sumLine" class="note"></div>
+    <div class="tabs" id="segTabs"></div>
+    <div id="segHelp" class="note"></div>
+    <div class="row" style="margin:6px 0"><button class="btn" id="segCopy">WhatsApp కి కాపీ</button><button class="btn" id="segXls">Excel డౌన్‌లోడ్</button></div>
+    <div class="tw" id="segTable"></div>
+  </div>
+
+  <!-- STEP 3 -->
+  <div class="card hidden" id="reportCard">
+    <h2><span class="step">3</span> పంపాల్సిన పట్టికలు</h2>
+    <div class="tabs" id="repTabs"></div>
+    <div class="row" id="secPick" style="margin-bottom:8px"></div>
+    <div class="row" style="margin:6px 0"><button class="btn" id="repCopy">WhatsApp కి కాపీ</button><button class="btn" id="repXls">Excel డౌన్‌లోడ్</button><button class="btn" id="allXls">అన్ని పట్టికలు (ఒకే Excel)</button></div>
+    <pre class="wa" id="repWa"></pre>
+    <div class="tw" id="repTable"></div>
+  </div>
+
+  <!-- STEP 4 -->
+  <div class="card hidden" id="pubCard">
+    <h2><span class="step">4</span> Publish – టీమ్ యాప్‌కి పంపు</h2>
+    <p class="note" id="pubInfo"></p>
+    <label class="note"><input type="checkbox" id="pubCI" checked> టీమ్ యాప్ "Dashboard" ట్యాబ్ (cases-info.json) కూడా ఈ Excel తో అప్‌డేట్ చేయి</label>
+    <div class="row" style="margin-top:8px"><button class="btn p" id="publish">Publish</button></div>
+    <div id="pubMsg"></div>
+  </div>
+
+  <!-- HISTORY -->
+  <div class="card">
+    <h2>🕘 History / వెనక్కి వెళ్ళడం</h2>
+    <p class="note">ప్రతి Publish ముందు పాత డేటా కాపీ దాచబడుతుంది. తప్పు జరిగితే ఇక్కడ నుంచి పాత వెర్షన్ తిరిగి పెట్టవచ్చు.</p>
+    <div class="row"><button class="btn" id="loadHist">History చూపించు</button></div>
+    <div class="tw" id="histTable"></div>
+    <div id="histMsg"></div>
+  </div>
+</main>
+
+<script type="module">
+import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs";
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs";
+const E = window.CCEngine;
+const OWNER = "Raana11", REPO = "case-calendar";
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const msg = (el, html, kind = "warn") => { $(el).innerHTML = html ? `<div class="msg ${kind}">${html}</div>` : ""; };
+const pad = n => String(n).padStart(2, "0");
+const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; };
+const fmtD = iso => iso ? new Date(iso + "T00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" }) : "";
+
+/* ---------- GitHub ---------- */
+const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} } };
+let token = store.get("cc_gh_token") || "";
+const b64enc = str => { const b = new TextEncoder().encode(str); let s = ""; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000)); return btoa(s); };
+const b64dec = b64 => new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\n/g, "")), c => c.charCodeAt(0)));
+async function gh(path, opts = {}) {
+  const r = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}${path ? "/" + path : ""}`, { ...opts, headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${token}`, "X-GitHub-Api-Version": "2022-11-28", ...(opts.headers || {}) } });
+  if (!r.ok) { const t = await r.text(); const e = new Error(`GitHub ${r.status}: ${t.slice(0, 160)}`); e.status = r.status; throw e; }
+  return r.status === 204 ? null : r.json();
+}
+async function getFile(path) { const j = await gh(`contents/${path}?ref=main`); return { sha: j.sha, text: b64dec(j.content) }; }
+async function putFile(path, text, sha, message) { return gh(`contents/${path}`, { method: "PUT", body: JSON.stringify({ message, content: b64enc(text), branch: "main", ...(sha ? { sha } : {}) }) }); }
+
+function showKey() {
+  $("keyState").innerHTML = token ? "✓ Key సేవ్ అయి ఉంది. <button class='btn' id='clrTok'>Key తీసేయి</button>" : "Publish చేయడానికి GitHub key అవసరం. (Steps 1–3 key లేకుండానే పనిచేస్తాయి.)";
+  $("keyForm").classList.toggle("hidden", !!token);
+  const c = $("clrTok"); if (c) c.onclick = () => { token = ""; store.set("cc_gh_token", null); showKey(); };
+}
+$("saveTok").onclick = async () => {
+  token = $("tok").value.trim(); if (!token) return;
+  try { const j = await gh(""); if (!j.permissions || !j.permissions.push) throw new Error("ఈ key కి write అనుమతి లేదు (Contents: Read and write ఇవ్వండి)."); store.set("cc_gh_token", token); $("tok").value = ""; showKey(); }
+  catch (e) { token = ""; $("keyState").innerHTML = `<div class="msg err">Key పనిచేయలేదు: ${esc(e.message)}</div>`; }
+};
+showKey();
+
+/* ---------- Step 1 ---------- */
+let pdfFile = null, xlsFile = null, freshOK = false;
+function checkReady() {
+  freshOK = true; let w = "";
+  if (xlsFile) {
+    const mod = new Date(xlsFile.lastModified); const modIso = `${mod.getFullYear()}-${pad(mod.getMonth()+1)}-${pad(mod.getDate())}`;
+    const t = todayISO(), nameDate = (xlsFile.name.match(/(\d{2})(\d{2})(\d{4})/) || []);
+    const nameIso = nameDate.length ? `${nameDate[3]}-${nameDate[2]}-${nameDate[1]}` : "";
+    if (modIso !== t && nameIso !== t) {
+      freshOK = false;
+      w = `<div class="msg warn">⚠ ఈ Excel ఈ రోజుది కాదనిపిస్తోంది (ఫైల్ తేదీ ${esc(modIso)}). ఎప్పుడూ ఆ రోజు డౌన్‌లోడ్ చేసిన endowmentsinfo Excel మాత్రమే వాడాలి.<br><label><input type="checkbox" id="freshAck"> ఇది ఈ రోజు డౌన్‌లోడ్ చేసినదే – కొనసాగించు</label></div>`;
+    }
+  }
+  $("freshWarn").innerHTML = w;
+  const ack = $("freshAck"); if (ack) ack.onchange = () => { freshOK = ack.checked; $("run").disabled = !(pdfFile && xlsFile && freshOK); };
+  $("run").disabled = !(pdfFile && xlsFile && freshOK);
+}
+$("fPdf").onchange = e => { pdfFile = e.target.files[0] || null; checkReady(); };
+$("fXls").onchange = e => { xlsFile = e.target.files[0] || null; checkReady(); };
+
+let XROWS = null, CL = null, EI = null, OLD = null, REPORT = null, TABLES = null;
+const opts = { exclude: new Set(), include: new Set(), secFix: {}, known: new Set() };
+
+$("run").onclick = async () => {
+  $("run").disabled = true; msg("runMsg", ""); const pg = $("prog"); pg.classList.remove("hidden"); pg.value = 2;
+  try {
+    // current team data (public file on this same site) – used to recognise known Legal Cell cases and keep remarks
+    try { const r = await fetch("data.json?t=" + Date.now(), { cache: "no-store" }); OLD = r.ok ? await r.json() : { cases: [], status: {} }; }
+    catch { OLD = { cases: [], status: {} }; }
+    opts.known = new Set((OLD.cases || []).map(c => c.n));
+    const wb = XLSX.read(await xlsFile.arrayBuffer(), { type: "array" });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+    if (!rows.length || !("Case Number" in rows[0])) throw new Error("ఇది endowmentsinfo Court_Cases_Report Excel లా లేదు ('Case Number' కాలమ్ లేదు).");
+    EI = E.parseEndowmentsInfo(rows); XROWS = rows; pg.value = 10;
+    const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(await pdfFile.arrayBuffer()) }).promise;
+    const pages = await E.pdfToLines(pdf, (p, n) => { pg.value = 10 + Math.round(85 * p / n); });
+    CL = E.parseCauseList(pages); pg.value = 100;
+    if (!CL.items.length) throw new Error("PDF లో కేసులు చదవలేకపోయాను. ఇది హైకోర్టు కాజ్ లిస్ట్ PDF యేనా?");
+    if (!CL.date) throw new Error("కాజ్ లిస్ట్ తేదీ ('To be Heard on ...') కనిపించలేదు.");
+    recompute();
+    msg("runMsg", `✓ కాజ్ లిస్ట్ తేదీ: <b>${fmtD(CL.date)}</b> · PDF లో ${CL.items.length} items · endowmentsinfo లో ${EI.map.size} కేసులు`, "ok");
+    ["verifyCard", "reportCard", "pubCard"].forEach(id => $(id).classList.remove("hidden"));
+  } catch (e) { msg("runMsg", "తప్పు: " + esc(e.message || e), "err"); }
+  pg.classList.add("hidden"); $("run").disabled = false;
+};
+
+/* ---------- Step 2 ---------- */
+const SEGS = [
+  ["listed", "Listed on", "కాజ్ లిస్ట్‌లో వచ్చిన మన కేసులు. తప్పు కేసును 'తీసేయి' టిక్ చేయండి, సెక్షన్ తప్పుంటే మార్చండి."],
+  ["filed", "Counter filed", "endowmentsinfo ప్రకారం కౌంటర్ దాఖలైనవి."],
+  ["toFile", "Counter to be filed", "కౌంటర్ NOT filed లేదా status ఖాళీ – సెక్షన్లు చర్య తీసుకోవాలి."],
+  ["notNeeded", "Counter not necessary", "Formal / proforma party – కౌంటర్ అవసరం లేదు."],
+  ["notInSite", "Not in endowmentsinfo", "కాజ్ లిస్ట్‌లో ఉంది కానీ endowmentsinfo లో లేదు – DEO చేర్చాలి."],
+  ["noSection", "Section missing", "సెక్షన్ లేనివి – Listed ట్యాబ్‌లో సెక్షన్ పెట్టవచ్చు."],
+  ["contempt", "Contempt (CC)", "కోర్టు ధిక్కార కేసులు – ప్రత్యేక శ్రద్ధ."],
+  ["possible", "Possible – verify", "ఆలయం/మఠం పేరు ఉంది కానీ Endowments న్యాయవాది లేరు. మనదైతే 'చేర్చు' టిక్ చేయండి."],
+  ["ttd", "TTD excluded", "TTD కేసులు – తొలగించబడ్డాయి (చూడటానికి మాత్రమే)."],
+  ["removed", "Removed by you", "మీరు తీసేసినవి – మళ్ళీ చేర్చాలంటే టిక్ తీసేయండి."]
+];
+let segView = "listed", repView = "alo1", repSec = "";
+const pill = c => { const m = { filed: "pf", notfiled: "pn", proforma: "pp", blank: "pb", missing: "pm" }; return `<span class="pill ${m[c.counter]}">${esc(c.counterLabel)}</span>`; };
+
+function recompute() {
+  REPORT = E.buildReport(CL, EI, opts);
+  REPORT.seg.removed = [...opts.exclude].map(n => ({ caseNo: n }));
+  const merged = E.mergeData(OLD, REPORT, EI, new Date().toISOString());
+  TABLES = E.tables(REPORT, merged.data);
+  $("sumLine").innerHTML = `<b>${fmtD(REPORT.date)}</b> – మన కేసులు <b>${REPORT.seg.listed.length}</b> (TTD తొలగించి)`;
+  $("pubInfo").innerHTML = `${fmtD(REPORT.date)} కాజ్ లిస్ట్‌లోని <b>${REPORT.seg.listed.length}</b> కేసులు టీమ్ యాప్ క్యాలెండర్‌లో చేరుతాయి (కొత్తవి ${merged.added}, ఇప్పటికే ఉన్నవి ${merged.updated}). మిగతా కేసుల కౌంటర్ స్థితి/సెక్షన్ ఈ Excel నుంచి అప్‌డేట్ అవుతుంది. ALO రిమార్కులు, C/S/G కోడ్‌లు అలాగే ఉంటాయి.`;
+  renderSeg(); renderRep();
+}
+
+function segRows(key) { return REPORT.seg[key] || []; }
+function renderSeg() {
+  $("segTabs").innerHTML = SEGS.map(([k, l]) => `<button data-k="${k}" class="${k === segView ? "on" : ""}">${l}<b>${segRows(k).length}</b></button>`).join("");
+  const [, label, help] = SEGS.find(s => s[0] === segView); $("segHelp").textContent = help;
+  const rows = segRows(segView); let h;
+  if (segView === "possible") {
+    h = `<table><tr><th>చేర్చు</th><th>Case</th><th>Court/Item</th><th>District</th><th>PDF text</th></tr>` + rows.map(c => `<tr><td><input type="checkbox" data-inc="${esc(c.caseNo)}" ${opts.include.has(c.caseNo) ? "checked" : ""}></td><td><b>${esc(c.caseNo)}</b></td><td>${esc(c.court)} / ${esc(c.item)}</td><td>${esc(c.district)}</td><td class="note">${esc(c.text)}</td></tr>`).join("") + `</table>`;
+    const extra = [...opts.include].filter(n => !rows.some(r => r.caseNo === n));
+    if (extra.length) h += `<p class="note">చేర్చినవి (Listed లో ఉన్నాయి): ${extra.map(esc).join(", ")} <button class="btn" data-clrinc>తీసేయి</button></p>`;
+  } else if (segView === "ttd") {
+    h = `<table><tr><th>Case</th><th>Court/Item</th><th>District</th></tr>` + rows.map(c => `<tr><td>${esc(c.caseNo)}</td><td>${esc(c.court)} / ${esc(c.item)}</td><td>${esc(c.district)}</td></tr>`).join("") + `</table>`;
+  } else if (segView === "removed") {
+    h = `<table><tr><th>మళ్ళీ చేర్చు</th><th>Case</th></tr>` + rows.map(c => `<tr><td><input type="checkbox" data-unrm="${esc(c.caseNo)}"></td><td>${esc(c.caseNo)}</td></tr>`).join("") + `</table>`;
+  } else {
+    const edit = segView === "listed" || segView === "noSection";
+    h = `<table><tr>${segView === "listed" ? "<th>తీసేయి</th>" : ""}<th>Case</th><th>Court / Item</th><th>Section</th><th>District</th><th>Temple</th><th>Counter</th><th>Stage</th></tr>` +
+      rows.map(c => `<tr>${segView === "listed" ? `<td><input type="checkbox" data-rm="${esc(c.caseNo)}"></td>` : ""}<td><b>${esc(c.caseNo)}</b>${c.lc && c.lc.length ? `<div class="note">(${esc(c.lc.join(", "))})</div>` : ""}${c.knownOnly ? `<div class="note">Legal Cell జాబితా నుంచి</div>` : ""}</td><td>${esc(c.court)} / ${esc(c.item)}</td>
+      <td>${edit ? `<input type="text" data-sec="${esc(c.caseNo)}" value="${esc(c.sec)}" placeholder="—">` : esc(c.sec || "—")}</td><td>${esc(c.district)}</td><td>${esc(c.temple)}</td><td>${pill(c)}</td><td class="note">${esc(c.stage)}</td></tr>`).join("") + `</table>`;
+  }
+  $("segTable").innerHTML = rows.length ? h : `<p class="note">ఏమీ లేవు.</p>`;
+}
+$("segTabs").onclick = e => { const b = e.target.closest("button[data-k]"); if (b) { segView = b.dataset.k; renderSeg(); } };
+$("segTable").addEventListener("change", e => {
+  const t = e.target;
+  if (t.dataset.rm) { opts.exclude.add(t.dataset.rm); recompute(); }
+  else if (t.dataset.unrm) { opts.exclude.delete(t.dataset.unrm); recompute(); }
+  else if (t.dataset.inc) { t.checked ? opts.include.add(t.dataset.inc) : opts.include.delete(t.dataset.inc); recompute(); }
+  else if (t.dataset.sec != null) { const v = t.value.trim().toUpperCase(); if (v) opts.secFix[t.dataset.sec] = v; else delete opts.secFix[t.dataset.sec]; setTimeout(recompute, 0); }
+});
+$("segTable").addEventListener("click", e => { if (e.target.closest("[data-clrinc]")) { opts.include.clear(); recompute(); } });
+const segPlain = () => segRows(segView).map(c => ({ Case: c.caseNo, Court: c.court, Item: c.item, Section: c.sec || "", District: c.district || "", Temple: c.temple || "", Counter: c.counterLabel || "" }));
+$("segCopy").onclick = () => copy(E.toWhatsApp(`${SEGS.find(s => s[0] === segView)[1]} – ${fmtD(REPORT.date)}`, segPlain(), ["Case", "Court", "Item", "Section", "District", "Counter"]), "segCopy");
+$("segXls").onclick = () => download({ [SEGS.find(s => s[0] === segView)[1]]: segPlain() }, `${segView}_${REPORT.date}.xlsx`);
+
+/* ---------- Step 3 ---------- */
+const REPS = [["alo1", "ALO-1 (కోర్టు)"], ["alo2", "ALO-2 (GP / కౌంటర్లు)"], ["sections", "సెక్షన్లు"], ["deo", "DEO"], ["head", "HEAD"]];
+function repData() {
+  if (repView === "sections") { const s = Object.keys(TABLES.sections); if (!s.includes(repSec)) repSec = s[0] || ""; return TABLES.sections[repSec] || []; }
+  if (repView === "head") return TABLES.head.urgent;
+  return TABLES[repView];
+}
+function repTitle() {
+  const d = fmtD(REPORT.date);
+  return { alo1: `ALO-1: ${d} కోర్టులో మన కేసులు`, alo2: `ALO-2: కౌంటర్ దాఖలు కావాల్సినవి (${d} listed)`, sections: `Section ${repSec}: ${d} listed కేసులు`, deo: `DEO: endowmentsinfo లో చేయాల్సిన పనులు (${d})`, head: `HEAD: ${d} సారాంశం` }[repView];
+}
+function repWhatsApp() {
+  const rows = repData();
+  if (repView === "head") return `*${repTitle()}*\n` + TABLES.head.summary.map(([k, v]) => `${k}: ${v}`).join("\n") + "\n\n" + E.toWhatsApp("అత్యవసరం / ప్రత్యేక శ్రద్ధ", rows, ["Case", "Court", "Item", "Section", "Counter", "Remark"]);
+  const cols = { alo1: ["Case", "Court", "Item", "Section", "Last result", "Last remark"], alo2: ["Case", "Section", "Counter", "Counter by", "Court", "Item"], sections: ["Case", "Court", "Item", "Counter", "Temple", "Last remark"], deo: ["Action", "Case", "Section", "District", "Counter"] }[repView];
+  return E.toWhatsApp(repTitle(), rows, cols);
+}
+function renderRep() {
+  $("repTabs").innerHTML = REPS.map(([k, l]) => `<button data-r="${k}" class="${k === repView ? "on" : ""}">${l}</button>`).join("");
+  $("secPick").innerHTML = repView === "sections" ? `<select id="secSel">${Object.keys(TABLES.sections).map(s => `<option ${s === repSec ? "selected" : ""}>${esc(s)}</option>`).join("")}</select>` : "";
+  const ss = $("secSel"); if (ss) { if (!repSec) repSec = ss.value; ss.onchange = () => { repSec = ss.value; renderRep(); }; }
+  const rows = repData();
+  $("repWa").textContent = repWhatsApp();
+  const head = repView === "head" ? `<table><tr><th>అంశం</th><th>సంఖ్య</th></tr>${TABLES.head.summary.map(([k, v]) => `<tr><td>${esc(k)}</td><td><b>${v}</b></td></tr>`).join("")}</table><h3 style="font-size:14px">అత్యవసరం</h3>` : "";
+  const cols = rows[0] ? Object.keys(rows[0]) : [];
+  $("repTable").innerHTML = head + (rows.length ? `<table><tr>${cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr>${rows.map(r => `<tr>${cols.map(c => `<td>${esc(r[c])}</td>`).join("")}</tr>`).join("")}</table>` : `<p class="note">ఏమీ లేవు.</p>`);
+}
+$("repTabs").onclick = e => { const b = e.target.closest("button[data-r]"); if (b) { repView = b.dataset.r; renderRep(); } };
+$("repCopy").onclick = () => copy(repWhatsApp(), "repCopy");
+$("repXls").onclick = () => download({ [repView === "sections" ? "Section " + repSec : REPS.find(r => r[0] === repView)[1]]: repView === "head" ? [...TABLES.head.summary.map(([k, v]) => ({ Item: k, Count: v })), ...repData()] : repData() }, `${repView}${repView === "sections" ? "_" + repSec : ""}_${REPORT.date}.xlsx`);
+$("allXls").onclick = () => {
+  const sheets = { "ALO-1": TABLES.alo1, "ALO-2": TABLES.alo2, "DEO": TABLES.deo, "HEAD summary": TABLES.head.summary.map(([k, v]) => ({ Item: k, Count: v })), "HEAD urgent": TABLES.head.urgent };
+  for (const [s, rows] of Object.entries(TABLES.sections)) sheets["Sec " + s] = rows;
+  download(sheets, `Reports_${REPORT.date}.xlsx`);
+};
+
+/* ---------- helpers ---------- */
+async function copy(text, btnId) {
+  const b = $(btnId), old = b.textContent;
+  try { await navigator.clipboard.writeText(text); b.textContent = "కాపీ అయింది ✓"; }
+  catch { const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); b.textContent = "కాపీ అయింది ✓"; } catch { b.textContent = "కాపీ కాలేదు"; } ta.remove(); }
+  setTimeout(() => b.textContent = old, 1800);
+}
+function download(sheets, name) {
+  const wb = XLSX.utils.book_new();
+  for (const [n, rows] of Object.entries(sheets)) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length ? rows : [{ "": "None" }]), n.replace(/[\\/?*[\]:]/g, " ").slice(0, 31));
+  XLSX.writeFile(wb, name);
+}
+
+/* ---------- Step 4: publish ---------- */
+const stamp = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`; };
+$("publish").onclick = async () => {
+  if (!token) { msg("pubMsg", "ముందు పైన GitHub key సేవ్ చేయండి.", "err"); return; }
+  const btn = $("publish"); btn.disabled = true; msg("pubMsg", "Publish అవుతోంది…", "warn");
+  try {
+    const cur = await getFile("data.json");
+    await putFile(`history/${stamp()}.json`, cur.text, null, `Backup before update (${REPORT.date})`);
+    const merged = E.mergeData(JSON.parse(cur.text), REPORT, EI, new Date().toISOString());
+    merged.data.meta.files = { pdf: pdfFile.name, excel: xlsFile.name };
+    await putFile("data.json", JSON.stringify(merged.data), cur.sha, `Cause list ${REPORT.date}: ${REPORT.seg.listed.length} cases (+${merged.added} new)`);
+    if ($("pubCI").checked) {
+      const ci = E.buildCasesInfo(XROWS, new Date().toISOString());
+      let sha = null; try { sha = (await gh("contents/cases-info.json?ref=main")).sha; } catch (e) { if (e.status !== 404) throw e; }
+      await putFile("cases-info.json", JSON.stringify(ci), sha, `endowmentsinfo list: ${ci.meta.count} cases`);
+    }
+    msg("pubMsg", `✓ Publish అయింది. టీమ్ యాప్‌లో 1–2 నిమిషాల్లో ${fmtD(REPORT.date)} కేసులు కనిపిస్తాయి.`, "ok");
+  } catch (e) { msg("pubMsg", "Publish కాలేదు: " + esc(e.message), "err"); }
+  btn.disabled = false;
+};
+
+/* ---------- history / rollback ---------- */
+$("loadHist").onclick = async () => {
+  if (!token) { msg("histMsg", "History చూడటానికి GitHub key కావాలి.", "err"); return; }
+  try {
+    const list = (await gh("contents/history?ref=main")).filter(f => f.name.endsWith(".json")).sort((a, b) => b.name.localeCompare(a.name)).slice(0, 30);
+    $("histTable").innerHTML = `<table><tr><th>Backup (ఈ సమయానికి ముందు డేటా)</th><th></th></tr>${list.map(f => `<tr><td>${esc(f.name.replace(".json", "").replace("_", " "))}</td><td><button class="btn" data-restore="${esc(f.path)}">ఇది తిరిగి పెట్టు</button></td></tr>`).join("")}</table>`;
+    msg("histMsg", list.length ? "" : "ఇంకా backups లేవు.");
+  } catch (e) { msg("histMsg", e.status === 404 ? "ఇంకా backups లేవు (మొదటి Publish తర్వాత వస్తాయి)." : "చూపించలేకపోయాను: " + esc(e.message), e.status === 404 ? "warn" : "err"); }
+};
+$("histTable").addEventListener("click", async e => {
+  const b = e.target.closest("[data-restore]"); if (!b) return;
+  if (b.dataset.armed !== "1") { b.dataset.armed = "1"; b.textContent = "ఖచ్చితమా? మళ్ళీ నొక్కండి"; return; }
+  b.disabled = true;
+  try {
+    const old = await getFile(b.dataset.restore), cur = await getFile("data.json");
+    await putFile(`history/${stamp()}.json`, cur.text, null, "Backup before restore");
+    await putFile("data.json", old.text, cur.sha, `Restore ${b.dataset.restore}`);
+    msg("histMsg", "✓ పాత వెర్షన్ తిరిగి పెట్టబడింది. టీమ్ యాప్ 1–2 నిమిషాల్లో మారుతుంది.", "ok");
+  } catch (err) { msg("histMsg", "తిరిగి పెట్టలేకపోయాను: " + esc(err.message), "err"); b.disabled = false; }
+});
+</script>
+</body>
+</html>
